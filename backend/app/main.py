@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
 
+from app.api import campaigns, contacts, settings as app_settings
+
 # Create tables automatically for local development
 Base.metadata.create_all(bind=engine)
 
@@ -21,8 +23,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/health")
+app.include_router(campaigns.router, prefix="/api")
+app.include_router(contacts.router, prefix="/api")
+app.include_router(app_settings.router, prefix="/api")
+
+@app.get("/api/health")
 def health_check():
     return {"status": "ok", "app": settings.PROJECT_NAME}
-
-# TODO: Add API routers here
