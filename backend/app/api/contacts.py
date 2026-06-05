@@ -2,14 +2,31 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Contact, GeneratedEmail
-from app.schemas import ContactResponse, GeneratedEmailResponse
+from app.models import Campaign, Contact, GeneratedEmail, EmailLog
+from app.schemas import (
+    ContactResponse,
+    ContactWithEmailResponse,
+    GeneratedEmailResponse,
+    GeneratedEmailUpdate,
+)
+from app.services.ai_generator import generate_personalized_email
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
-@router.get("/{campaign_id}", response_model=List[ContactResponse])
+@router.get("/{campaign_id}", response_model=List[ContactWithEmailResponse])
 def get_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):
-    return db.query(Contact).filter(Contact.campaign_id == campaign_id).all()
+    """Contacts joined with their generated email so the preview table needs one call."""
+    contacts = db.query(Contact).filter(Contact.campaign_id == campaign_id).all()
+    result = []
+    for c in contacts:
+        data = ContactWithEmailResponse.model_validate(c)
+        if c.generated_email:
+            data.email_id = c.generated_email.id
+            data.subject = c.generated_email.subject
+            data.body = c.generated_email.body
+            data.email_status = c.generated_email.status
+        result.append(data)
+    return result
 
 @router.get("/{contact_id}/email", response_model=GeneratedEmailResponse)
 def get_generated_email(contact_id: int, db: Session = Depends(get_db)):
