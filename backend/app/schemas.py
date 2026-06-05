@@ -65,16 +65,63 @@ class GeneratedEmailResponse(BaseModel):
     subject: str
     body: str
     status: str
-    
+
     class Config:
         from_attributes = True
-        
+
+class GeneratedEmailUpdate(BaseModel):
+    subject: str
+    body: str
+
+class ContactWithEmailResponse(ContactResponse):
+    """Contact joined with its generated email so the preview table needs a single call."""
+    email_id: Optional[int] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    email_status: Optional[str] = None
+
 class EmailLogResponse(BaseModel):
     id: int
     contact_id: int
     status: str
     message: Optional[str]
     timestamp: datetime
-    
+
     class Config:
         from_attributes = True
+
+class CampaignStatsResponse(BaseModel):
+    total: int
+    valid: int
+    invalid: int
+    generated: int
+    approved: int
+    sent: int
+    failed: int
+    pending: int
+
+class RecentCampaign(BaseModel):
+    id: int
+    name: str
+    status: str
+    sent: int
+
+class RecentLog(BaseModel):
+    id: int
+    contact_email: Optional[str] = None
+    status: str
+    message: Optional[str] = None
+    timestamp: datetime
+
+class DashboardStatsResponse(BaseModel):
+    total_campaigns: int
+    emails_sent: int
+    failed: int
+    pending: int
+    success_rate: float
+    recent_campaigns: List[RecentCampaign]
+    recent_logs: List[RecentLog]
+
+class GmailTestResponse(BaseModel):
+    ok: bool
+    message: str
