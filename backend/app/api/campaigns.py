@@ -90,10 +90,64 @@ def pause_campaign(campaign_id: int, db: Session = Depends(get_db)):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
+
     campaign.status = "Paused"
     db.commit()
     return {"message": "Campaign paused"}
+
+@router.post("/{campaign_id}/resume")
+def resume_campaign(campaign_id: int, gmail_account_id: int, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign.status = "Sending"
+    db.commit()
+    send_campaign_emails_task.delay(campaign_id, gmail_account_id)
+    return {"message": "Campaign resumed"}
+
+@router.post("/{campaign_id}/stop")
+def stop_campaign(campaign_id: int, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    campaign.status = "Stopped"
+    db.commit()
+    return {"message": "Campaign stopped"}
+
+@router.delete("/{campaign_id}")
+def delete_campaign(campaign_id: int, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    db.delete(campaign)  # cascades to contacts -> generated_emails / logs
+    db.commit()
+    return {"message": "Campaign deleted"}
+
+@router.get("/{campaign_id}/stats", response_model=CampaignStatsResponse)
+def get_campaign_stats(campaign_id: int, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    contacts = db.query(Contact).filter(Contact.campaign_id == campaign_id)
+    total = contacts.count()
+    valid = contacts.filter(Contact.status == "Valid").count()
+    invalid = contacts.filter(Contact.status == "Invalid").count()
+
+    emails = db.query(GeneratedEmail).join(Contact).filter(Contact.campaign_id == campaign_id)
+    generated = emails.count()
+    approved = emails.filter(GeneratedEmail.status == "Approved").count()
+    sent = emails.filter(GeneratedEmail.status == "Sent").count()
+    failed = emails.filter(GeneratedEmail.status == "Failed").count()
+    pending = emails.filter(GeneratedEmail.status == "Pending").count()
+
+    return CampaignStatsResponse(
+        total=total, valid=valid, invalid=invalid, generated=generated,
+        approved=approved, sent=sent, failed=failed, pending=pending,
+    )
 
 @router.get("/{campaign_id}/logs")
 def get_campaign_logs(campaign_id: int, db: Session = Depends(get_db)):
