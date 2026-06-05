@@ -1,1 +1,1 @@
-create documentation.md. write in detail with bulet and highlighted points, include instructions and features also include dev stack, stats and configurations. add "System Architecture" using Mermaid flowchart code.
+create documentation.md. write in detail with bullet and highlighted points, include instructions and features also include dev stack, stats and configurations. add "System Architecture" using Mermaid flowchart code.
