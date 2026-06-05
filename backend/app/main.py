@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
 
-from app.api import campaigns, contacts, settings as app_settings
+from app.api import campaigns, contacts, settings as app_settings, dashboard
 
 # Create tables automatically for local development
 Base.metadata.create_all(bind=engine)

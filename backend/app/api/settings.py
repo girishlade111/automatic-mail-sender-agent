@@ -27,3 +27,26 @@ def add_gmail_account(account: GmailAccountCreate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(db_account)
     return db_account
+
+@router.post("/gmail/{account_id}/test", response_model=GmailTestResponse)
+def test_gmail_account(account_id: int, db: Session = Depends(get_db)):
+    """Test Connection button (PRD §19): authenticate against Gmail SMTP without sending."""
+    account = db.query(GmailAccount).filter(GmailAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Gmail account not found")
+
+    try:
+        app_password = decrypt_password(account.encrypted_password)
+        verify_smtp_login(account.email, app_password)
+        return GmailTestResponse(ok=True, message="Connection successful")
+    except Exception as e:
+        return GmailTestResponse(ok=False, message=f"Connection failed: {e}")
+
+@router.delete("/gmail/{account_id}")
+def delete_gmail_account(account_id: int, db: Session = Depends(get_db)):
+    account = db.query(GmailAccount).filter(GmailAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Gmail account not found")
+    db.delete(account)
+    db.commit()
+    return {"message": "Disconnected"}
