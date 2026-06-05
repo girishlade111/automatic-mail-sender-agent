@@ -29,15 +29,17 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex bg-[#0a0a0c] text-white`}
       >
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto p-8 relative">
-          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
-          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/10 blur-[120px] pointer-events-none" />
-          
-          <div className="relative z-10 max-w-6xl mx-auto">
-            {children}
-          </div>
-        </main>
+        <Providers>
+          <Sidebar />
+          <main className="flex-1 overflow-y-auto p-8 relative">
+            <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-500/10 blur-[120px] pointer-events-none" />
+
+            <div className="relative z-10 max-w-6xl mx-auto">
+              {children}
+            </div>
+          </main>
+        </Providers>
       </body>
     </html>
   );
