@@ -26,6 +26,7 @@ app.add_middleware(
 app.include_router(campaigns.router, prefix="/api")
 app.include_router(contacts.router, prefix="/api")
 app.include_router(app_settings.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
 
 @app.get("/api/health")
 def health_check():
