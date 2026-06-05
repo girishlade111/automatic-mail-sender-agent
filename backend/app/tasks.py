@@ -3,8 +3,20 @@ from app.database import SessionLocal
 from app.models import Campaign, Contact, GeneratedEmail, EmailLog, GmailAccount
 from app.services.ai_generator import generate_personalized_email
 from app.services.email_sender import send_email
+from app.services.retry import with_retries
 from app.security import decrypt_password
+from app.config import settings
+from datetime import datetime, timedelta, timezone
 import time
+
+
+def _sent_count_since(db, campaign_id: int, since) -> int:
+    """Count successful sends across ALL campaigns since ``since`` (Gmail limits are per account)."""
+    return (
+        db.query(EmailLog)
+        .filter(EmailLog.status == "Sent", EmailLog.timestamp >= since)
+        .count()
+    )
 
 @celery_app.task(bind=True, max_retries=3)
 def generate_campaign_emails_task(self, campaign_id: int):
@@ -38,12 +50,15 @@ def generate_campaign_emails_task(self, campaign_id: int):
             }
             
             try:
-                result = generate_personalized_email(
-                    contact_data=contact_data,
-                    prompt_template=campaign.prompt_template or "",
-                    tone=campaign.tone,
-                    length=campaign.length,
-                    temperature=campaign.temperature
+                result = with_retries(
+                    lambda: generate_personalized_email(
+                        contact_data=contact_data,
+                        prompt_template=campaign.prompt_template or "",
+                        tone=campaign.tone,
+                        length=campaign.length,
+                        temperature=campaign.temperature
+                    ),
+                    attempts=settings.AI_RETRY_ATTEMPTS,
                 )
                 
                 gen_email = GeneratedEmail(
