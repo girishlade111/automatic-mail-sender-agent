@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List
 from app.database import get_db
-from app.models import Campaign, Contact, EmailLog
-from app.schemas import CampaignCreate, CampaignResponse
+from app.models import Campaign, Contact, EmailLog, GeneratedEmail
+from app.schemas import CampaignCreate, CampaignResponse, CampaignStatsResponse
 from app.services.file_processor import process_file
 from app.tasks import generate_campaign_emails_task, send_campaign_emails_task
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
+
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB (PRD §7)
 
 @router.get("/", response_model=List[CampaignResponse])
 def get_campaigns(db: Session = Depends(get_db)):
