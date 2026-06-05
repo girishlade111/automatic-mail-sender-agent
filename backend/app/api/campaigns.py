@@ -37,7 +37,13 @@ async def upload_contacts(campaign_id: int, file: UploadFile = File(...), db: Se
         raise HTTPException(status_code=404, detail="Campaign not found")
         
     content = await file.read()
-    valid_contacts, invalid_contacts = process_file(content, file.filename)
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File exceeds the 25 MB limit")
+
+    try:
+        valid_contacts, invalid_contacts = process_file(content, file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     for contact_data in valid_contacts:
         db_contact = Contact(**contact_data, campaign_id=campaign_id, status="Valid")
