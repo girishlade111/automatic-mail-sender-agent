@@ -100,43 +100,64 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
             db.refresh(campaign)
             if campaign.status in ["Paused", "Stopped"]:
                 break
-            
+
+            # Rate limiting (PRD §22): pause automatically if hourly/daily caps are hit.
+            now = datetime.now(timezone.utc)
+            sent_last_hour = _sent_count_since(db, campaign_id, now - timedelta(hours=1))
+            sent_last_day = _sent_count_since(db, campaign_id, now - timedelta(days=1))
+            if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR or sent_last_day >= settings.MAX_EMAILS_PER_DAY:
+                campaign.status = "Paused"
+                limit = "hourly" if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR else "daily"
+                # Attach the notice to the next pending contact for log visibility.
+                next_contact = db.query(Contact).filter(Contact.campaign_id == campaign_id).first()
+                if next_contact:
+                    db.add(EmailLog(
+                        contact_id=next_contact.id,
+                        status="RateLimited",
+                        message=f"Paused: {limit} sending limit reached",
+                    ))
+                db.commit()
+                break
+
             # Find next Approved email
             email_to_send = db.query(GeneratedEmail).join(Contact).filter(
                 Contact.campaign_id == campaign_id,
                 GeneratedEmail.status == "Approved"
             ).first()
-            
+
             if not email_to_send:
                 campaign.status = "Completed"
                 db.commit()
                 break
-                
+
             contact = email_to_send.contact
             log_queued = EmailLog(contact_id=contact.id, status="Sending", message="Starting SMTP transmission")
             db.add(log_queued)
             db.commit()
-            
+
             try:
-                send_email(
-                    to_email=contact.email,
-                    subject=email_to_send.subject,
-                    body=email_to_send.body,
-                    sender_email=gmail_acc.email,
-                    app_password=app_password
+                with_retries(
+                    lambda: send_email(
+                        to_email=contact.email,
+                        subject=email_to_send.subject,
+                        body=email_to_send.body,
+                        sender_email=gmail_acc.email,
+                        app_password=app_password
+                    ),
+                    attempts=settings.SMTP_RETRY_ATTEMPTS,
                 )
-                
+
                 email_to_send.status = "Sent"
                 log_success = EmailLog(contact_id=contact.id, status="Sent", message="Email delivered successfully")
                 db.add(log_success)
                 db.commit()
-                
+
             except Exception as e:
                 email_to_send.status = "Failed"
                 log_fail = EmailLog(contact_id=contact.id, status="Failed", message=str(e))
                 db.add(log_fail)
                 db.commit()
-                
+
             # Delay sequentially to prevent spam detection
             delay = campaign.delay_seconds or 20
             time.sleep(delay)
