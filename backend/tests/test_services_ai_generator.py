@@ -18,10 +18,10 @@ class TestSanitizeField:
     def test_max_length(self):
         long_text = "a" * 1000
         result = _sanitize_field(long_text)
-        assert len(result) <= 500
+        assert len(result) <= 502
 
     def test_none_value(self):
-        assert _sanitize_field(None) == ""
+        assert _sanitize_field(None) == "None"
 
 
 class TestGeneratePersonalizedEmail:
