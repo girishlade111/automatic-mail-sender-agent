@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import GmailAccount, User
-from app.schemas import GmailAccountCreate, GmailAccountResponse
-from app.security import encrypt_password
+from app.schemas import GmailAccountCreate, GmailAccountResponse, GmailTestResponse
+from app.security import encrypt_password, decrypt_password
+from app.services.email_sender import verify_smtp_login
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
