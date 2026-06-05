@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "supersecretkey"  # Change in production
     ENCRYPTION_KEY: str = "" # Used for encrypting App Passwords (needs to be 32 bytes base64 encoded for Fernet)
 
+    # Sending safeguards (PRD §21, §22, §26)
+    MAX_EMAILS_PER_HOUR: int = 50
+    MAX_EMAILS_PER_DAY: int = 400
+    SMTP_RETRY_ATTEMPTS: int = 3
+    AI_RETRY_ATTEMPTS: int = 3
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
