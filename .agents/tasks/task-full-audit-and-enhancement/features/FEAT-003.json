@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Add advanced agent skills: email scheduling (schedule campaigns for future send), A/B testing support (multiple prompt variants per campaign), contact scoring/prioritization, email health pre-check, and webhook notifications for campaign events.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Add scheduling support: Add scheduled_at (DateTime, nullable) field to Campaign model. Add /api/campaigns/{id}/schedule endpoint that sets scheduled_at and status to 'Scheduled'. Add a Celery periodic task check (or modify send logic) that picks up scheduled campaigns when their time arrives. Add ScheduledStatus to status badge.",
     "Add A/B testing: Add an ab_variants JSON field to Campaign model (stores list of prompt variants). Add /api/campaigns/{id}/ab-test endpoint that accepts multiple prompt_template variants. During generation, randomly assign contacts to variants. Track which variant each email used (add variant_label field to GeneratedEmail model). Add /api/campaigns/{id}/ab-results endpoint that returns per-variant stats (sent, failed counts).",
@@ -31,5 +31,5 @@
     "cd /projects/sandbox/automatic-mail-sender-agent/frontend && npx tsc --noEmit && npm run build"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 69 backend tests pass (50 existing + 19 new). Frontend builds and TypeScript compiles with zero errors using Next.js 16.2.7 on Node v22.23.1. Used httpx for webhook delivery (already in requirements.txt). The webhook service uses synchronous best-effort delivery with 5s timeout. Scheduling sets status to 'Scheduled' but actual periodic task execution requires Celery Beat with Redis in production. A/B testing randomly assigns contacts to variants during generation. Contact auto-scoring awards +1 per non-null profile field (name, company, role, industry, city, website, linkedin). Preflight dialog gates sending with pass/fail checks for approved emails, Gmail connection, SMTP connectivity, and rate limits."
 }
