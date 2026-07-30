@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-003",
+  "type": "chore",
+  "description": "Update Docker configuration, add health checks, ensure docker-compose.yml is production-ready, update .env.example with new variables, and add backend tests for critical paths.",
+  "status": "completed",
+  "steps": [
+    "Update docker-compose.yml: Add healthchecks for backend (curl /api/health), db (pg_isready), and redis (redis-cli ping). Add restart policies. Fix the frontend Dockerfile to not depend on package-lock.json (use npm install instead of npm ci if lockfile missing).",
+    "Update .env.example with any new environment variables added (if any).",
+    "Create backend/tests/ directory with conftest.py that sets up a test SQLite database and provides a test client fixture using FastAPI TestClient.",
+    "Create backend/tests/test_campaigns.py with tests for: create campaign, get campaigns list, get single campaign, delete campaign, upload contacts (with a small test CSV), get campaign stats.",
+    "Create backend/tests/test_contacts.py with tests for: get contacts for campaign, approve email, approve all, edit email.",
+    "Create backend/tests/test_settings.py with tests for: add gmail account, list gmail accounts, delete gmail account.",
+    "Create backend/tests/test_templates.py with tests for: create template, list templates, get template, update template, delete template.",
+    "Create backend/tests/test_file_processor.py with tests for: parse CSV content, parse TXT content, validate contacts, handle duplicates, handle invalid emails.",
+    "Add pytest and httpx to backend/requirements.txt for testing.",
+    "Ensure all tests pass with: cd backend && python -m pytest tests/ -v"
+  ],
+  "acceptance_criteria": [
+    "docker-compose.yml has healthchecks for all services",
+    "All backend tests pass: pytest tests/ -v shows all green",
+    "Test coverage includes campaign CRUD, contact management, templates, file processing",
+    "Frontend Dockerfile handles missing lockfile gracefully",
+    "conftest.py properly sets up isolated test database"
+  ],
+  "verification": [
+    "cd backend && pip install -r requirements.txt && python -m pytest tests/ -v"
+  ],
+  "blocked_reason": null,
+  "findings": "All 30 tests pass on Python 3.9. The test database uses a file-based SQLite (test.db) rather than in-memory to avoid potential threading issues with FastAPI TestClient. The test.db is created/dropped per test via the autouse fixture. pytest and httpx were already in requirements.txt from FEAT-001. The system uses Python 3.9 (python3 command, not python)."
+}
