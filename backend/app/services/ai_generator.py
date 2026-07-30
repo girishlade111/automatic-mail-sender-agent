@@ -1,7 +1,11 @@
-import openai
 import json
+import logging
 import re
+
+import openai
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Cap each interpolated field so a single oversized cell can't blow up the prompt (PRD §28).
 MAX_FIELD_LENGTH = 500
@@ -29,6 +33,8 @@ def generate_personalized_email(contact_data: dict, prompt_template: str, tone: 
     """Calls NVIDIA NIM to generate an email. Returns a dict with 'subject' and 'body'."""
     if not settings.NVIDIA_NIM_API_KEY:
         raise ValueError("NVIDIA NIM API Key is not configured")
+
+    logger.info("Generating email for contact: %s", contact_data.get("name", "Unknown"))
 
     client = openai.OpenAI(
         api_key=settings.NVIDIA_NIM_API_KEY,
@@ -73,14 +79,16 @@ def generate_personalized_email(contact_data: dict, prompt_template: str, tone: 
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
-            
+
         result = json.loads(content)
+        logger.info("Successfully generated email for contact: %s", contact_data.get("name", "Unknown"))
         return {
             "subject": result.get("subject", "Personalized Outreach").strip(),
             "body": result.get("body", content).strip()
         }
     except Exception:
         # Fallback if output is not strictly JSON
+        logger.warning("Failed to parse JSON response, using fallback parsing")
         lines = content.split('\n', 1)
         subject = lines[0].replace('Subject:', '').strip() if len(lines) > 0 else "Personalized Outreach"
         body = lines[1].strip() if len(lines) > 1 else content

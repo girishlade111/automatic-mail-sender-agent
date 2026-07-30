@@ -1,3 +1,6 @@
+import logging
+from functools import partial
+
 from app.celery_app import celery_app
 from app.database import SessionLocal
 from app.models import Campaign, Contact, GeneratedEmail, EmailLog, GmailAccount
@@ -9,14 +12,42 @@ from app.config import settings
 from datetime import datetime, timedelta, timezone
 import time
 
+logger = logging.getLogger(__name__)
+
 
 def _sent_count_since(db, campaign_id: int, since) -> int:
     """Count successful sends across ALL campaigns since ``since`` (Gmail limits are per account)."""
     return (
         db.query(EmailLog)
-        .filter(EmailLog.status == "Sent", EmailLog.timestamp >= since)
+        .filter(
+            EmailLog.status == "Sent",
+            EmailLog.timestamp >= since,
+        )
         .count()
     )
+
+
+def _generate_email_for_contact(contact_data: dict, campaign_prompt: str, tone: str, length: str, temperature: float) -> dict:
+    """Helper to generate email for a specific contact, avoiding closure bugs in loops."""
+    return generate_personalized_email(
+        contact_data=contact_data,
+        prompt_template=campaign_prompt,
+        tone=tone,
+        length=length,
+        temperature=temperature,
+    )
+
+
+def _send_email_for_contact(to_email: str, subject: str, body: str, sender_email: str, app_password: str) -> None:
+    """Helper to send email for a specific contact, avoiding closure bugs in loops."""
+    send_email(
+        to_email=to_email,
+        subject=subject,
+        body=body,
+        sender_email=sender_email,
+        app_password=app_password,
+    )
+
 
 @celery_app.task(bind=True, max_retries=3)
 def generate_campaign_emails_task(self, campaign_id: int):
@@ -24,20 +55,22 @@ def generate_campaign_emails_task(self, campaign_id: int):
     try:
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not campaign:
+            logger.warning("Campaign %d not found, aborting generation task.", campaign_id)
             return
-            
+
         campaign.status = "Generating"
         db.commit()
-        
+        logger.info("Starting email generation for campaign %d", campaign_id)
+
         contacts = db.query(Contact).filter(
             Contact.campaign_id == campaign_id,
             Contact.status == "Valid"
         ).all()
-        
+
         for contact in contacts:
             if contact.generated_email:
                 continue
-                
+
             contact_data = {
                 "name": contact.name,
                 "company": contact.company,
@@ -46,43 +79,51 @@ def generate_campaign_emails_task(self, campaign_id: int):
                 "city": contact.city,
                 "country": contact.country,
                 "website": contact.website,
-                "notes": contact.notes
+                "notes": contact.notes,
             }
-            
+
+            # Use partial to bind current values and avoid closure-over-loop-variable bug
+            gen_fn = partial(
+                _generate_email_for_contact,
+                contact_data=contact_data,
+                campaign_prompt=campaign.prompt_template or "",
+                tone=campaign.tone,
+                length=campaign.length,
+                temperature=campaign.temperature,
+            )
+
             try:
-                result = with_retries(
-                    lambda: generate_personalized_email(
-                        contact_data=contact_data,
-                        prompt_template=campaign.prompt_template or "",
-                        tone=campaign.tone,
-                        length=campaign.length,
-                        temperature=campaign.temperature
-                    ),
-                    attempts=settings.AI_RETRY_ATTEMPTS,
-                )
-                
+                result = with_retries(gen_fn, attempts=settings.AI_RETRY_ATTEMPTS)
+
                 gen_email = GeneratedEmail(
                     contact_id=contact.id,
                     subject=result["subject"],
                     body=result["body"],
-                    status="Pending"
+                    status="Pending",
                 )
                 db.add(gen_email)
-                
+
                 log = EmailLog(contact_id=contact.id, status="Generated", message="AI generation successful")
                 db.add(log)
                 db.commit()
-                
+                logger.info("Generated email for contact %d", contact.id)
+
             except Exception as e:
                 log = EmailLog(contact_id=contact.id, status="Failed", message=f"Generation failed: {str(e)}")
                 db.add(log)
                 db.commit()
-                
+                logger.error("Generation failed for contact %d: %s", contact.id, str(e))
+
         campaign.status = "Generated"
         db.commit()
-        
+        logger.info("Completed email generation for campaign %d", campaign_id)
+
+    except Exception as e:
+        logger.exception("Unexpected error in generate_campaign_emails_task for campaign %d", campaign_id)
+        raise
     finally:
         db.close()
+
 
 @celery_app.task(bind=True, max_retries=3)
 def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
@@ -90,18 +131,21 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
     try:
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         gmail_acc = db.query(GmailAccount).filter(GmailAccount.id == gmail_account_id).first()
-        
+
         if not campaign or not gmail_acc:
+            logger.warning("Campaign %d or Gmail account %d not found, aborting send task.", campaign_id, gmail_account_id)
             return
-            
+
         app_password = decrypt_password(gmail_acc.encrypted_password)
-        
+        logger.info("Starting send task for campaign %d", campaign_id)
+
         while True:
             db.refresh(campaign)
             if campaign.status in ["Paused", "Stopped"]:
+                logger.info("Campaign %d is %s, stopping send loop.", campaign_id, campaign.status)
                 break
 
-            # Rate limiting (PRD §22): pause automatically if hourly/daily caps are hit.
+            # Rate limiting (PRD SS22): pause automatically if hourly/daily caps are hit.
             now = datetime.now(timezone.utc)
             sent_last_hour = _sent_count_since(db, campaign_id, now - timedelta(hours=1))
             sent_last_day = _sent_count_since(db, campaign_id, now - timedelta(days=1))
@@ -117,6 +161,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
                         message=f"Paused: {limit} sending limit reached",
                     ))
                 db.commit()
+                logger.warning("Campaign %d paused due to %s rate limit.", campaign_id, limit)
                 break
 
             # Find next Approved email
@@ -128,6 +173,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
             if not email_to_send:
                 campaign.status = "Completed"
                 db.commit()
+                logger.info("Campaign %d completed - no more approved emails.", campaign_id)
                 break
 
             contact = email_to_send.contact
@@ -135,32 +181,38 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
             db.add(log_queued)
             db.commit()
 
+            # Use partial to bind current values and avoid closure-over-loop-variable bug
+            send_fn = partial(
+                _send_email_for_contact,
+                to_email=contact.email,
+                subject=email_to_send.subject,
+                body=email_to_send.body,
+                sender_email=gmail_acc.email,
+                app_password=app_password,
+            )
+
             try:
-                with_retries(
-                    lambda: send_email(
-                        to_email=contact.email,
-                        subject=email_to_send.subject,
-                        body=email_to_send.body,
-                        sender_email=gmail_acc.email,
-                        app_password=app_password
-                    ),
-                    attempts=settings.SMTP_RETRY_ATTEMPTS,
-                )
+                with_retries(send_fn, attempts=settings.SMTP_RETRY_ATTEMPTS)
 
                 email_to_send.status = "Sent"
                 log_success = EmailLog(contact_id=contact.id, status="Sent", message="Email delivered successfully")
                 db.add(log_success)
                 db.commit()
+                logger.info("Sent email to %s for campaign %d", contact.email, campaign_id)
 
             except Exception as e:
                 email_to_send.status = "Failed"
                 log_fail = EmailLog(contact_id=contact.id, status="Failed", message=str(e))
                 db.add(log_fail)
                 db.commit()
+                logger.error("Failed to send email to %s: %s", contact.email, str(e))
 
             # Delay sequentially to prevent spam detection
             delay = campaign.delay_seconds or 20
             time.sleep(delay)
-            
+
+    except Exception as e:
+        logger.exception("Unexpected error in send_campaign_emails_task for campaign %d", campaign_id)
+        raise
     finally:
         db.close()
