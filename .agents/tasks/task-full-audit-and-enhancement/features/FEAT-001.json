@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Fix critical backend bugs: lambda closure issue in tasks.py, add missing dedicated logs endpoint with pagination/filtering, add campaign update endpoint, fix celery circular import safety, add proper error handling for missing ENCRYPTION_KEY, and add comprehensive backend tests.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Fix the lambda closure bug in backend/app/tasks.py generate_campaign_emails_task - the lambda inside with_retries captures variables by reference in a loop. Extract into a proper function call or use default argument to capture current values.",
     "Add a dedicated /api/logs endpoint in backend/app/api/dashboard.py (or a new logs router) with pagination (skip/limit), filtering by campaign_id, status, and date range. The frontend logs page currently only gets 8 logs from dashboard stats.",
@@ -33,5 +33,5 @@
     "cd /projects/sandbox/automatic-mail-sender-agent/backend && pip install -r requirements.txt && python -m pytest tests/ -v"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 50 tests pass. Python 3.9.25 on sandbox (use python3 not python). SQLite in-memory DB works for testing. Pydantic deprecation warnings about class-based Config (cosmetic only). local.db gets auto-created by SQLAlchemy on import - it is gitignored or can be ignored. The /api/logs endpoint is available both at /api/logs (top-level) and /api/dashboard/logs (under dashboard router)."
 }
