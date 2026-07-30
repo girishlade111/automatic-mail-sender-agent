@@ -25,6 +25,17 @@ export interface CampaignCreate {
   delay_seconds: number
 }
 
+export interface CampaignUpdate {
+  name?: string
+  description?: string
+  type?: string
+  prompt_template?: string
+  tone?: string
+  length?: string
+  temperature?: number
+  delay_seconds?: number
+}
+
 export interface ContactWithEmail {
   id: number
   campaign_id: number
@@ -46,6 +57,13 @@ export interface ContactWithEmail {
   email_status?: string | null
 }
 
+export interface ManualContactCreate {
+  email: string
+  name?: string
+  company?: string
+  role?: string
+}
+
 export interface GeneratedEmail {
   id: number
   contact_id: number
@@ -60,6 +78,12 @@ export interface EmailLog {
   status: string
   message?: string | null
   timestamp: string
+  contact_email?: string | null
+}
+
+export interface LogsResponse {
+  logs: EmailLog[]
+  total: number
 }
 
 export interface CampaignStats {
@@ -96,6 +120,35 @@ export interface DashboardStats {
   success_rate: number
   recent_campaigns: RecentCampaign[]
   recent_logs: RecentLog[]
+}
+
+export interface Template {
+  id: number
+  name: string
+  description?: string | null
+  prompt_template: string
+  tone?: string | null
+  length?: string | null
+  temperature: number
+  created_at: string
+}
+
+export interface TemplateCreate {
+  name: string
+  description?: string
+  prompt_template: string
+  tone?: string
+  length?: string
+  temperature: number
+}
+
+export interface TemplateUpdate {
+  name?: string
+  description?: string
+  prompt_template?: string
+  tone?: string
+  length?: string
+  temperature?: number
 }
 
 export interface GmailAccount {

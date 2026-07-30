@@ -11,16 +11,19 @@ import { StatusBadge } from "@/components/status-badge"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
-import { Check, Edit2, RefreshCw, Send, Sparkles, Loader2 } from "lucide-react"
+import { Check, Edit2, RefreshCw, Send, Sparkles, Loader2, Download, UserPlus } from "lucide-react"
 import {
   useCampaign, useContacts, useGenerateEmails, useApproveEmail, useApproveAll,
   useRegenerateEmail, useEditEmail, useGmailAccounts, useSendCampaign,
+  useAddManualContact, useExportContacts,
 } from "@/lib/hooks"
+import { useToast } from "@/components/toast-provider"
 import type { ContactWithEmail } from "@/lib/types"
 
 export default function PreviewCampaign({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const { toast } = useToast()
 
   const { data: campaign } = useCampaign(id)
   const { data: contacts, isLoading } = useContacts(id)
@@ -31,12 +34,21 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
   const editEmail = useEditEmail(id)
   const { data: gmailAccounts } = useGmailAccounts()
   const send = useSendCampaign()
+  const addManualContact = useAddManualContact()
+  const exportContacts = useExportContacts()
 
   const [editing, setEditing] = useState<ContactWithEmail | null>(null)
   const [editSubject, setEditSubject] = useState("")
   const [editBody, setEditBody] = useState("")
   const [gmailId, setGmailId] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
+
+  // Manual contact form state
+  const [manualEmail, setManualEmail] = useState("")
+  const [manualName, setManualName] = useState("")
+  const [manualCompany, setManualCompany] = useState("")
+  const [manualRole, setManualRole] = useState("")
+  const [showManualForm, setShowManualForm] = useState(false)
 
   const valid = (contacts ?? []).filter((c) => c.status === "Valid")
   const generatedCount = valid.filter((c) => c.email_id).length
@@ -51,7 +63,41 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
   const saveEdit = async () => {
     if (!editing?.email_id) return
     await editEmail.mutateAsync({ emailId: editing.email_id, subject: editSubject, body: editBody })
+    toast({ title: "Email updated", variant: "success" })
     setEditing(null)
+  }
+
+  const handleAddContact = async () => {
+    if (!manualEmail) {
+      toast({ title: "Email is required", variant: "error" })
+      return
+    }
+    try {
+      await addManualContact.mutateAsync({
+        campaignId: Number(id),
+        contact: {
+          email: manualEmail,
+          name: manualName || undefined,
+          company: manualCompany || undefined,
+          role: manualRole || undefined,
+        },
+      })
+      toast({ title: "Contact added", variant: "success" })
+      setManualEmail("")
+      setManualName("")
+      setManualCompany("")
+      setManualRole("")
+      setShowManualForm(false)
+    } catch {
+      toast({ title: "Failed to add contact", variant: "error" })
+    }
+  }
+
+  const handleExport = () => {
+    exportContacts.mutate(Number(id), {
+      onSuccess: () => toast({ title: "CSV downloaded", variant: "success" }),
+      onError: () => toast({ title: "Failed to export contacts", variant: "error" }),
+    })
   }
 
   const startSending = async () => {
@@ -63,9 +109,11 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
     }
     try {
       await send.mutateAsync({ campaignId: Number(id), gmailAccountId: Number(accountId) })
+      toast({ title: "Campaign sending started", variant: "success" })
       router.push(`/campaigns/${id}/progress`)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start sending")
+      toast({ title: "Failed to start campaign", variant: "error" })
     }
   }
 
@@ -79,6 +127,9 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
           </p>
         </div>
         <div className="flex gap-3">
+          <Button variant="outline" onClick={handleExport} disabled={exportContacts.isPending}>
+            <Download className="w-4 h-4 mr-2" /> Export CSV
+          </Button>
           {!hasGenerated && (
             <Button
               onClick={() => generate.mutate(Number(id))}
@@ -86,7 +137,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-0"
             >
               {generate.isPending
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
                 : <><Sparkles className="w-4 h-4 mr-2" /> Generate Emails</>}
             </Button>
           )}
@@ -111,11 +162,84 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
+      {/* Manual Contact Addition */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Add Contact Manually</CardTitle>
+              <CardDescription>Add individual contacts without a file upload.</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowManualForm(!showManualForm)}
+            >
+              <UserPlus className="w-4 h-4 mr-2" /> {showManualForm ? "Hide" : "Add Contact"}
+            </Button>
+          </div>
+        </CardHeader>
+        {showManualForm && (
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="manual-email">Email *</Label>
+                <Input
+                  id="manual-email"
+                  type="email"
+                  placeholder="john@example.com"
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manual-name">Name</Label>
+                <Input
+                  id="manual-name"
+                  placeholder="John Doe"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manual-company">Company</Label>
+                <Input
+                  id="manual-company"
+                  placeholder="Acme Inc"
+                  value={manualCompany}
+                  onChange={(e) => setManualCompany(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manual-role">Role</Label>
+                <Input
+                  id="manual-role"
+                  placeholder="CTO"
+                  value={manualRole}
+                  onChange={(e) => setManualRole(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={handleAddContact}
+                disabled={addManualContact.isPending}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white border-0"
+              >
+                {addManualContact.isPending
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Adding...</>
+                  : <><UserPlus className="w-4 h-4 mr-2" /> Add Contact</>}
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Generated Emails</CardTitle>
           <CardDescription>
-            {isLoading ? "Loading contacts…" : `${valid.length} valid contacts • ${generatedCount} generated`}
+            {isLoading ? "Loading contacts..." : `${valid.length} valid contacts - ${generatedCount} generated`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -132,7 +256,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
               {valid.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
-                    <p className="font-medium">{c.name || "—"}</p>
+                    <p className="font-medium">{c.name || "---"}</p>
                     <p className="text-xs text-white/50">{c.email}</p>
                   </TableCell>
                   <TableCell className="font-medium text-white/80">
@@ -204,7 +328,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
           className="bg-indigo-600 hover:bg-indigo-700 border-0 text-white shadow-lg shadow-indigo-500/20"
         >
           {send.isPending
-            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting…</>
+            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting...</>
             : <><Send className="w-4 h-4 mr-2" /> Start Campaign Queue</>}
         </Button>
       </div>
@@ -232,7 +356,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
               disabled={editEmail.isPending}
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-0"
             >
-              {editEmail.isPending ? "Saving…" : "Save"}
+              {editEmail.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

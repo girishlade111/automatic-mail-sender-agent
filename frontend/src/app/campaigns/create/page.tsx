@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { UploadCloud, ArrowRight, Loader2 } from "lucide-react"
-import { useCreateCampaign, useUploadContacts } from "@/lib/hooks"
+import { useCreateCampaign, useUploadContacts, useTemplates } from "@/lib/hooks"
+import { useToast } from "@/components/toast-provider"
 
 interface FormValues {
   name: string
@@ -26,8 +27,10 @@ export default function CreateCampaign() {
   const [error, setError] = useState<string | null>(null)
   const createCampaign = useCreateCampaign()
   const uploadContacts = useUploadContacts()
+  const { data: templates } = useTemplates()
+  const { toast } = useToast()
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       type: "Cold Outreach",
       tone: "Professional",
@@ -38,6 +41,18 @@ export default function CreateCampaign() {
   })
 
   const submitting = createCampaign.isPending || uploadContacts.isPending
+
+  const loadTemplate = (templateId: string) => {
+    if (!templateId) return
+    const tpl = (templates ?? []).find((t) => t.id === Number(templateId))
+    if (tpl) {
+      setValue("prompt_template", tpl.prompt_template)
+      setValue("tone", tpl.tone ?? "Professional")
+      setValue("length", tpl.length ?? "Medium")
+      setValue("temperature", tpl.temperature)
+      toast({ title: "Template loaded", description: tpl.name, variant: "info" })
+    }
+  }
 
   const onSubmit = async (values: FormValues) => {
     setError(null)
@@ -56,10 +71,12 @@ export default function CreateCampaign() {
         delay_seconds: Number(values.delay_seconds),
       })
       await uploadContacts.mutateAsync({ campaignId: campaign.id, file })
+      toast({ title: "Campaign created", variant: "success" })
       router.push(`/campaigns/${campaign.id}/preview`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong"
       setError(msg)
+      toast({ title: "Failed to create campaign", variant: "error" })
     }
   }
 
@@ -112,8 +129,27 @@ export default function CreateCampaign() {
 
         <Card>
           <CardHeader>
-            <CardTitle>AI Personalization Engine</CardTitle>
-            <CardDescription>Configure how NVIDIA NIM generates your emails.</CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle>AI Personalization Engine</CardTitle>
+                <CardDescription>Configure how the AI generates your emails.</CardDescription>
+              </div>
+              {(templates ?? []).length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-white/50 whitespace-nowrap">Load Template:</Label>
+                  <select
+                    className={selectClass + " w-48"}
+                    defaultValue=""
+                    onChange={(e) => loadTemplate(e.target.value)}
+                  >
+                    <option value="" className="bg-slate-900">Select template...</option>
+                    {(templates ?? []).map((t) => (
+                      <option key={t.id} value={t.id} className="bg-slate-900">{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
@@ -125,7 +161,7 @@ export default function CreateCampaign() {
                 {...register("prompt_template", { required: true })}
               />
               {errors.prompt_template && <p className="text-xs text-red-400">A prompt template is required.</p>}
-              <p className="text-xs text-white/50">Available variables: {'{{name}}'}, {'{{company}}'}, {'{{role}}'}, {'{{industry}}'}, {'{{city}}'}, {'{{country}}'}, {'{{website}}'}</p>
+              <p className="text-xs text-white/50">Available variables: {"{{name}}"}, {"{{company}}"}, {"{{role}}"}, {"{{industry}}"}, {"{{city}}"}, {"{{country}}"}, {"{{website}}"}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -190,7 +226,7 @@ export default function CreateCampaign() {
 
         <div className="flex justify-end pt-4">
           <Button size="lg" type="submit" disabled={submitting} className="bg-indigo-600 hover:bg-indigo-700 border-0 text-white">
-            {submitting ? <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Processing…</> : <>Create &amp; Process <ArrowRight className="ml-2 w-4 h-4" /></>}
+            {submitting ? <><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Processing...</> : <>Create &amp; Process <ArrowRight className="ml-2 w-4 h-4" /></>}
           </Button>
         </div>
       </form>
