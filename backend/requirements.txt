@@ -14,3 +14,7 @@ pdfplumber
 python-multipart
 openai
 email-validator
+
+# Test dependencies
+pytest
+httpx

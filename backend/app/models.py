@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import enum
@@ -23,13 +23,19 @@ class Campaign(Base):
     name = Column(String, index=True)
     description = Column(Text, nullable=True)
     type = Column(String, default="Cold Outreach")
-    status = Column(String, default="Draft") # Draft, Pending, Generating, Generated, Sending, Paused, Stopped, Completed
+    status = Column(String, default="Draft") # Draft, Scheduled, Pending, Generating, Generated, Sending, Paused, Stopped, Completed
     
     prompt_template = Column(Text, nullable=True)
     tone = Column(String, nullable=True)
     length = Column(String, nullable=True)
     temperature = Column(Float, default=0.7)
     delay_seconds = Column(Integer, default=20)
+    
+    # Scheduling
+    scheduled_at = Column(DateTime, nullable=True)
+    
+    # A/B Testing - JSON list of {"label": "...", "prompt_template": "..."} objects
+    ab_variants = Column(Text, nullable=True)
     
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
@@ -51,6 +57,8 @@ class Contact(Base):
     linkedin = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     
+    score = Column(Integer, default=0)
+    
     status = Column(String, default="Pending") # Pending, Valid, Invalid, Excluded
     validation_error = Column(String, nullable=True)
     
@@ -66,8 +74,21 @@ class GeneratedEmail(Base):
     subject = Column(String)
     body = Column(Text)
     status = Column(String, default="Pending") # Pending, Approved, Rejected, Sent, Failed
+    variant_label = Column(String, nullable=True)  # A/B test variant label
     
     contact = relationship("Contact", back_populates="generated_email")
+
+class Template(Base):
+    __tablename__ = "templates"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    description = Column(Text, nullable=True)
+    prompt_template = Column(Text, nullable=True)
+    tone = Column(String, nullable=True)
+    length = Column(String, nullable=True)
+    temperature = Column(Float, default=0.7)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 
 class EmailLog(Base):
     __tablename__ = "email_logs"
@@ -79,3 +100,12 @@ class EmailLog(Base):
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     contact = relationship("Contact", back_populates="logs")
+
+
+class WebhookConfig(Base):
+    __tablename__ = "webhook_configs"
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String, nullable=False)
+    events = Column(Text, nullable=False)  # JSON list of event names e.g. ["completed","failed","paused"]
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

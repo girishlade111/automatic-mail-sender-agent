@@ -1,0 +1,37 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix critical backend bugs: lambda closure issue in tasks.py, add missing dedicated logs endpoint with pagination/filtering, add campaign update endpoint, fix celery circular import safety, add proper error handling for missing ENCRYPTION_KEY, and add comprehensive backend tests.",
+  "status": "completed",
+  "steps": [
+    "Fix the lambda closure bug in backend/app/tasks.py generate_campaign_emails_task - the lambda inside with_retries captures variables by reference in a loop. Extract into a proper function call or use default argument to capture current values.",
+    "Add a dedicated /api/logs endpoint in backend/app/api/dashboard.py (or a new logs router) with pagination (skip/limit), filtering by campaign_id, status, and date range. The frontend logs page currently only gets 8 logs from dashboard stats.",
+    "Add PUT /api/campaigns/{campaign_id} endpoint in backend/app/api/campaigns.py for updating campaign configuration (name, type, prompt_template, tone, length, temperature, delay_seconds). Add CampaignUpdate schema to schemas.py.",
+    "Add POST /api/contacts/manual endpoint in backend/app/api/contacts.py for manually adding individual contacts to a campaign without file upload.",
+    "Add GET /api/campaigns/{campaign_id}/contacts/export endpoint that exports campaign contacts with their email generation/send status as CSV.",
+    "Add a /api/health endpoint that also checks database connectivity (not just returns 'ok').",
+    "Add email template management: POST/GET/PUT/DELETE /api/templates endpoints with a new Template model (id, name, prompt_template, tone, length, temperature) so users can save and reuse templates across campaigns.",
+    "Add backend/app/models.py Template model with fields: id, name, description, prompt_template, tone, length, temperature, created_at.",
+    "Add proper input validation to the send endpoint - ensure campaign has approved emails before allowing send to start.",
+    "Add a /api/campaigns/{campaign_id}/duplicate endpoint that clones a campaign config (without contacts/emails).",
+    "Create backend/tests/ directory with conftest.py, test_campaigns.py, test_contacts.py, test_settings.py, test_file_processor.py, test_dashboard.py testing all API endpoints using TestClient and an in-memory SQLite database.",
+    "Add pytest and httpx to backend/requirements.txt as test dependencies."
+  ],
+  "acceptance_criteria": [
+    "Lambda closure bug is fixed - each contact in the generate loop gets its own captured data",
+    "GET /api/logs returns paginated logs with skip/limit params and optional campaign_id/status filters",
+    "PUT /api/campaigns/{id} updates campaign fields and returns updated campaign",
+    "POST /api/contacts/manual accepts a single contact payload and adds it to a campaign",
+    "GET /api/campaigns/{id}/contacts/export returns CSV download",
+    "Health endpoint checks DB connectivity",
+    "Template CRUD endpoints work (create, list, get, update, delete)",
+    "Send endpoint validates that at least one approved email exists",
+    "Duplicate endpoint creates a copy with 'Draft' status",
+    "All pytest tests pass with python -m pytest backend/tests/ -v"
+  ],
+  "verification": [
+    "cd /projects/sandbox/automatic-mail-sender-agent/backend && pip install -r requirements.txt && python -m pytest tests/ -v"
+  ],
+  "blocked_reason": null,
+  "findings": "All 50 tests pass. Python 3.9.25 on sandbox (use python3 not python). SQLite in-memory DB works for testing. Pydantic deprecation warnings about class-based Config (cosmetic only). local.db gets auto-created by SQLAlchemy on import - it is gitignored or can be ignored. The /api/logs endpoint is available both at /api/logs (top-level) and /api/dashboard/logs (under dashboard router)."
+}

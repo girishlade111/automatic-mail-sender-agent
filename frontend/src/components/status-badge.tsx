@@ -16,6 +16,7 @@ const STATUS_STYLES: Record<string, string> = {
   Draft: "border-yellow-500/20 bg-yellow-500/10 text-yellow-400",
   Pending: "border-yellow-500/20 bg-yellow-500/10 text-yellow-400",
   Paused: "border-yellow-500/20 bg-yellow-500/10 text-yellow-400",
+  Scheduled: "border-purple-500/20 bg-purple-500/10 text-purple-400",
   RateLimited: "border-orange-500/20 bg-orange-500/10 text-orange-400",
   // Negative
   Failed: "border-red-500/20 bg-red-500/10 text-red-400",

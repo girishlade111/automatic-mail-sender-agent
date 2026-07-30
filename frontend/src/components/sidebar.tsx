@@ -5,13 +5,16 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard, Megaphone, FilePlus, Megaphone as CampaignIcon,
   ScrollText, Settings as SettingsIcon, User as UserIcon,
+  FileText, BarChart3,
 } from "lucide-react"
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/campaigns", label: "Campaigns", icon: CampaignIcon, exact: true },
   { href: "/campaigns/create", label: "New Campaign", icon: FilePlus, exact: true },
+  { href: "/templates", label: "Templates", icon: FileText, exact: false },
   { href: "/logs", label: "Logs", icon: ScrollText, exact: false },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, exact: false },
   { href: "/settings", label: "Settings", icon: SettingsIcon, exact: false },
 ]
 

@@ -1,0 +1,35 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Add advanced agent skills: email scheduling (schedule campaigns for future send), A/B testing support (multiple prompt variants per campaign), contact scoring/prioritization, email health pre-check, and webhook notifications for campaign events.",
+  "status": "completed",
+  "steps": [
+    "Add scheduling support: Add scheduled_at (DateTime, nullable) field to Campaign model. Add /api/campaigns/{id}/schedule endpoint that sets scheduled_at and status to 'Scheduled'. Add a Celery periodic task check (or modify send logic) that picks up scheduled campaigns when their time arrives. Add ScheduledStatus to status badge.",
+    "Add A/B testing: Add an ab_variants JSON field to Campaign model (stores list of prompt variants). Add /api/campaigns/{id}/ab-test endpoint that accepts multiple prompt_template variants. During generation, randomly assign contacts to variants. Track which variant each email used (add variant_label field to GeneratedEmail model). Add /api/campaigns/{id}/ab-results endpoint that returns per-variant stats (sent, failed counts).",
+    "Add contact scoring: Add a score (Integer, default 0) field to Contact model. Add /api/contacts/{contact_id}/score endpoint (PUT with score value). Add scoring logic that auto-scores contacts based on data completeness (has name +1, has company +1, has role +1, etc.). Sort contacts by score in the preview page (highest first). Add useUpdateContactScore hook.",
+    "Add email health pre-check: Add /api/campaigns/{id}/preflight endpoint that validates before sending: checks at least one approved email exists, gmail account is connected, verifies SMTP connectivity, checks rate limits haven't been exceeded. Returns a structured preflight check result. Wire this into the frontend - show a preflight dialog before sending.",
+    "Add webhook/notification support: Add WebhookConfig model (id, url, events, active, created_at). Add CRUD endpoints /api/settings/webhooks. On campaign status changes (completed, failed, paused), fire HTTP POST to configured webhook URLs with event payload. Add webhook management UI in settings page.",
+    "Update frontend/src/app/campaigns/[id]/preview/page.tsx to show a preflight check dialog when user clicks 'Start Campaign Queue' - run the preflight check first, show results, then allow proceed.",
+    "Add scheduling UI to the campaign create/edit pages: a date/time picker for scheduled_at, and show scheduled status in campaign list.",
+    "Update frontend/src/app/campaigns/[id]/preview/page.tsx to display contact scores and allow reordering by score.",
+    "Add A/B test configuration UI in campaign create page: allow adding multiple prompt variants with labels, show which variant was used in the preview table.",
+    "Add webhook configuration section to the settings page with URL input, event selector (checkboxes for completed/failed/paused), test webhook button.",
+    "Update the sidebar to reflect any new navigation items if needed."
+  ],
+  "acceptance_criteria": [
+    "Campaigns can be scheduled for future sending with a datetime picker",
+    "A/B testing allows multiple prompt variants and tracks results per variant",
+    "Contacts get auto-scored based on data completeness and can be manually scored",
+    "Preflight check runs before sending and shows a pass/fail dialog",
+    "Webhook configuration CRUD works and webhooks fire on campaign status changes",
+    "All new backend endpoints have proper error handling and input validation",
+    "Frontend builds without TypeScript errors",
+    "Backend tests pass for new endpoints"
+  ],
+  "verification": [
+    "cd /projects/sandbox/automatic-mail-sender-agent/backend && python -m pytest tests/ -v",
+    "cd /projects/sandbox/automatic-mail-sender-agent/frontend && npx tsc --noEmit && npm run build"
+  ],
+  "blocked_reason": null,
+  "findings": "All 69 backend tests pass (50 existing + 19 new). Frontend builds and TypeScript compiles with zero errors using Next.js 16.2.7 on Node v22.23.1. Used httpx for webhook delivery (already in requirements.txt). The webhook service uses synchronous best-effort delivery with 5s timeout. Scheduling sets status to 'Scheduled' but actual periodic task execution requires Celery Beat with Redis in production. A/B testing randomly assigns contacts to variants during generation. Contact auto-scoring awards +1 per non-null profile field (name, company, role, industry, city, website, linkedin). Preflight dialog gates sending with pass/fail checks for approved emails, Gmail connection, SMTP connectivity, and rate limits."
+}

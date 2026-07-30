@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 class ContactBase(BaseModel):
@@ -21,6 +21,7 @@ class ContactResponse(ContactBase):
     id: int
     campaign_id: int
     status: str
+    score: int = 0
     validation_error: Optional[str] = None
 
     class Config:
@@ -43,6 +44,8 @@ class CampaignResponse(CampaignBase):
     id: int
     status: str
     created_at: datetime
+    scheduled_at: Optional[datetime] = None
+    ab_variants: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -65,6 +68,7 @@ class GeneratedEmailResponse(BaseModel):
     subject: str
     body: str
     status: str
+    variant_label: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -79,6 +83,7 @@ class ContactWithEmailResponse(ContactResponse):
     subject: Optional[str] = None
     body: Optional[str] = None
     email_status: Optional[str] = None
+    variant_label: Optional[str] = None
 
 class EmailLogResponse(BaseModel):
     id: int
@@ -86,6 +91,7 @@ class EmailLogResponse(BaseModel):
     status: str
     message: Optional[str]
     timestamp: datetime
+    contact_email: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -125,3 +131,156 @@ class DashboardStatsResponse(BaseModel):
 class GmailTestResponse(BaseModel):
     ok: bool
     message: str
+
+
+# --- Campaign Update Schema ---
+
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: Optional[float] = None
+    delay_seconds: Optional[int] = None
+
+
+# --- Manual Contact Add Schema ---
+
+class ManualContactCreate(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    linkedin: Optional[str] = None
+    notes: Optional[str] = None
+    campaign_id: int
+
+
+# --- Template Schemas ---
+
+class TemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: float = 0.7
+
+
+class TemplateCreate(TemplateBase):
+    pass
+
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: Optional[float] = None
+
+
+class TemplateResponse(TemplateBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Paginated Logs Response ---
+
+class PaginatedLogsResponse(BaseModel):
+    logs: List[EmailLogResponse]
+    total: int
+
+
+# --- Logs Query Schema ---
+
+class LogsQueryParams(BaseModel):
+    skip: int = 0
+    limit: int = 50
+    campaign_id: Optional[int] = None
+    status: Optional[str] = None
+
+
+# --- Scheduling Schema ---
+
+class ScheduleCampaign(BaseModel):
+    scheduled_at: datetime
+
+
+# --- A/B Testing Schemas ---
+
+class ABVariant(BaseModel):
+    label: str
+    prompt_template: str
+
+
+class ABTestSetup(BaseModel):
+    variants: List[ABVariant]
+
+
+class ABVariantResult(BaseModel):
+    label: str
+    total: int
+    sent: int
+    failed: int
+    pending: int
+    approved: int
+
+
+class ABResultsResponse(BaseModel):
+    campaign_id: int
+    variants: List[ABVariantResult]
+
+
+# --- Contact Scoring Schema ---
+
+class ContactScoreUpdate(BaseModel):
+    score: int
+
+
+# --- Preflight Check Schemas ---
+
+class PreflightCheckItem(BaseModel):
+    name: str
+    status: str  # "pass", "fail", "warning"
+    message: str
+
+
+class PreflightResponse(BaseModel):
+    checks: List[PreflightCheckItem]
+    can_proceed: bool
+
+
+# --- Webhook Schemas ---
+
+class WebhookConfigBase(BaseModel):
+    url: str
+    events: List[str]  # e.g. ["completed", "failed", "paused"]
+    active: bool = True
+
+
+class WebhookConfigCreate(WebhookConfigBase):
+    pass
+
+
+class WebhookConfigUpdate(BaseModel):
+    url: Optional[str] = None
+    events: Optional[List[str]] = None
+    active: Optional[bool] = None
+
+
+class WebhookConfigResponse(WebhookConfigBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

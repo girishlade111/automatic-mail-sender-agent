@@ -3,8 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "./api"
 import type {
+  ABResultsResponse,
+  ABTestSetup,
   Campaign,
   CampaignCreate,
+  CampaignUpdate,
   CampaignStats,
   ContactWithEmail,
   DashboardStats,
@@ -12,7 +15,17 @@ import type {
   GeneratedEmail,
   GmailAccount,
   GmailTestResult,
+  LogsResponse,
+  ManualContactCreate,
+  PreflightResponse,
+  ScheduleCampaignPayload,
+  Template,
+  TemplateCreate,
+  TemplateUpdate,
   UploadResult,
+  WebhookConfig,
+  WebhookConfigCreate,
+  WebhookConfigUpdate,
 } from "./types"
 
 // ----- Dashboard -----
@@ -51,6 +64,18 @@ export function useCreateCampaign() {
   })
 }
 
+export function useUpdateCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: CampaignUpdate }) =>
+      (await api.put<Campaign>(`/campaigns/${id}`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      qc.invalidateQueries({ queryKey: ["campaign", String(vars.id)] })
+    },
+  })
+}
+
 export function useDeleteCampaign() {
   const qc = useQueryClient()
   return useMutation({
@@ -58,6 +83,17 @@ export function useDeleteCampaign() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns"] })
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] })
+    },
+  })
+}
+
+export function useDuplicateCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) =>
+      (await api.post<Campaign>(`/campaigns/${id}/duplicate`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
     },
   })
 }
@@ -154,6 +190,25 @@ export function useCampaignLogs(id: number | string, active = true) {
   })
 }
 
+// ----- Paginated all-logs endpoint -----
+
+export function useAllLogs(params: { skip: number; limit: number; campaign_id?: number; status?: string }) {
+  return useQuery({
+    queryKey: ["all-logs", params],
+    queryFn: async () => {
+      const queryParams: Record<string, string | number> = {
+        skip: params.skip,
+        limit: params.limit,
+      }
+      if (params.campaign_id) queryParams.campaign_id = params.campaign_id
+      if (params.status) queryParams.status = params.status
+      const { data } = await api.get<LogsResponse>("/logs", { params: queryParams })
+      return data
+    },
+    refetchInterval: 10_000,
+  })
+}
+
 // ----- Contacts & generated emails -----
 
 export function useContacts(campaignId: number | string) {
@@ -162,6 +217,34 @@ export function useContacts(campaignId: number | string) {
     queryFn: async () =>
       (await api.get<ContactWithEmail[]>(`/contacts/${campaignId}`)).data,
     enabled: campaignId !== undefined && campaignId !== null && campaignId !== "",
+  })
+}
+
+export function useAddManualContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ campaignId, contact }: { campaignId: number; contact: ManualContactCreate }) =>
+      (await api.post(`/contacts/manual`, { ...contact, campaign_id: campaignId })).data,
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: ["contacts", String(vars.campaignId)] }),
+  })
+}
+
+export function useExportContacts() {
+  return useMutation({
+    mutationFn: async (campaignId: number) => {
+      const response = await api.get(`/campaigns/${campaignId}/contacts/export`, {
+        responseType: "blob",
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement("a")
+      link.href = url
+      link.setAttribute("download", `campaign-${campaignId}-contacts.csv`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    },
   })
 }
 
@@ -201,6 +284,41 @@ export function useRegenerateEmail(campaignId: number | string) {
   })
 }
 
+// ----- Templates -----
+
+export function useTemplates() {
+  return useQuery({
+    queryKey: ["templates"],
+    queryFn: async () => (await api.get<Template[]>("/templates")).data,
+  })
+}
+
+export function useCreateTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: TemplateCreate) =>
+      (await api.post<Template>("/templates", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+  })
+}
+
+export function useUpdateTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: TemplateUpdate }) =>
+      (await api.put<Template>(`/templates/${id}`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+  })
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) => (await api.delete(`/templates/${id}`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+  })
+}
+
 // ----- Gmail accounts -----
 
 export function useGmailAccounts() {
@@ -232,5 +350,100 @@ export function useDeleteGmailAccount() {
     mutationFn: async (accountId: number) =>
       (await api.delete(`/settings/gmail/${accountId}`)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gmail-accounts"] }),
+  })
+}
+
+// ----- Scheduling -----
+
+export function useScheduleCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ campaignId, payload }: { campaignId: number; payload: ScheduleCampaignPayload }) =>
+      (await api.post<Campaign>(`/campaigns/${campaignId}/schedule`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      qc.invalidateQueries({ queryKey: ["campaign", String(vars.campaignId)] })
+    },
+  })
+}
+
+// ----- A/B Testing -----
+
+export function useSetupABTest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ campaignId, payload }: { campaignId: number; payload: ABTestSetup }) =>
+      (await api.post<Campaign>(`/campaigns/${campaignId}/ab-test`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      qc.invalidateQueries({ queryKey: ["campaign", String(vars.campaignId)] })
+    },
+  })
+}
+
+export function useABResults(campaignId: number | string) {
+  return useQuery({
+    queryKey: ["ab-results", String(campaignId)],
+    queryFn: async () =>
+      (await api.get<ABResultsResponse>(`/campaigns/${campaignId}/ab-results`)).data,
+    enabled: campaignId !== undefined && campaignId !== null && campaignId !== "",
+  })
+}
+
+// ----- Contact Scoring -----
+
+export function useUpdateContactScore() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ contactId, score }: { contactId: number; score: number }) =>
+      (await api.put(`/contacts/${contactId}/score`, { score })).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts"] })
+    },
+  })
+}
+
+// ----- Preflight Check -----
+
+export function usePreflight() {
+  return useMutation({
+    mutationFn: async (campaignId: number) =>
+      (await api.post<PreflightResponse>(`/campaigns/${campaignId}/preflight`)).data,
+  })
+}
+
+// ----- Webhooks -----
+
+export function useWebhooks() {
+  return useQuery({
+    queryKey: ["webhooks"],
+    queryFn: async () => (await api.get<WebhookConfig[]>("/settings/webhooks")).data,
+  })
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: WebhookConfigCreate) =>
+      (await api.post<WebhookConfig>("/settings/webhooks", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  })
+}
+
+export function useUpdateWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: WebhookConfigUpdate }) =>
+      (await api.put<WebhookConfig>(`/settings/webhooks/${id}`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  })
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) =>
+      (await api.delete(`/settings/webhooks/${id}`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
   })
 }
