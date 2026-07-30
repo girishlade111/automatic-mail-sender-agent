@@ -12,6 +12,7 @@ export interface Campaign {
   delay_seconds: number
   status: string
   created_at: string
+  scheduled_at?: string | null
 }
 
 export interface CampaignCreate {
@@ -23,6 +24,16 @@ export interface CampaignCreate {
   length?: string
   temperature: number
   delay_seconds: number
+}
+
+export interface CampaignUpdate {
+  name?: string
+  description?: string
+  prompt_template?: string
+  tone?: string
+  length?: string
+  temperature?: number
+  delay_seconds?: number
 }
 
 export interface ContactWithEmail {
@@ -62,6 +73,22 @@ export interface EmailLog {
   timestamp: string
 }
 
+export interface PaginatedLog {
+  id: number
+  contact_id: number
+  contact_email?: string | null
+  status: string
+  message?: string | null
+  timestamp: string
+}
+
+export interface PaginatedLogs {
+  total: number
+  limit: number
+  offset: number
+  logs: PaginatedLog[]
+}
+
 export interface CampaignStats {
   total: number
   valid: number
@@ -71,6 +98,18 @@ export interface CampaignStats {
   sent: number
   failed: number
   pending: number
+}
+
+export interface AnalyticsData {
+  total_contacts: number
+  valid_contacts: number
+  emails_generated: number
+  emails_approved: number
+  emails_sent: number
+  emails_failed: number
+  delivery_rate: number
+  open_rate: number
+  avg_generation_time: number
 }
 
 export interface RecentCampaign {
@@ -110,6 +149,43 @@ export interface GmailTestResult {
 
 export interface UploadResult {
   message: string
+  valid: number
+  invalid: number
+}
+
+export interface EmailTemplate {
+  id: number
+  name: string
+  description?: string | null
+  subject_template: string
+  body_template: string
+  category?: string | null
+  created_at: string
+}
+
+export interface TemplateCreate {
+  name: string
+  description?: string
+  subject_template: string
+  body_template: string
+  category?: string
+}
+
+export interface TemplateUpdate {
+  name?: string
+  description?: string
+  subject_template?: string
+  body_template?: string
+  category?: string
+}
+
+export interface SchedulePayload {
+  scheduled_at: string
+}
+
+export interface ValidationResult {
+  message: string
+  validated: number
   valid: number
   invalid: number
 }

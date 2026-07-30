@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { KeyRound, Mail, CheckCircle2, Loader2 } from "lucide-react"
+import { KeyRound, Mail, CheckCircle2, Loader2, Gauge, Cpu } from "lucide-react"
 import {
   useGmailAccounts, useAddGmailAccount, useTestGmailAccount, useDeleteGmailAccount,
 } from "@/lib/hooks"
@@ -59,7 +59,7 @@ export default function Settings() {
             <CardDescription>Connect your Gmail account using an App Password to send emails.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {isLoading && <p className="text-white/50 text-sm">Loading accounts…</p>}
+            {isLoading && <p className="text-white/50 text-sm">Loading accounts...</p>}
 
             {(accounts ?? []).map((acc) => (
               <div key={acc.id} className="rounded-md bg-white/5 border border-white/10 p-4 flex items-center justify-between">
@@ -119,7 +119,7 @@ export default function Settings() {
               <div className="flex gap-3">
                 <Button type="submit" disabled={addAccount.isPending}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white border-0">
-                  {addAccount.isPending ? "Saving…" : "Save Account"}
+                  {addAccount.isPending ? "Saving..." : "Save Account"}
                 </Button>
               </div>
             </form>
@@ -129,16 +129,79 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-purple-400" />
-              <CardTitle>NVIDIA NIM Configuration</CardTitle>
+              <Gauge className="w-5 h-5 text-yellow-400" />
+              <CardTitle>Rate Limits</CardTitle>
             </div>
-            <CardDescription>Configure your NVIDIA NIM API keys for AI generation. Managed in environment variables.</CardDescription>
+            <CardDescription>Current sending rate limits configured for this instance.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-md bg-white/5 border border-white/10 p-4">
+                <p className="text-2xl font-bold text-white">20</p>
+                <p className="text-xs text-white/50 mt-1">Emails per minute</p>
+              </div>
+              <div className="rounded-md bg-white/5 border border-white/10 p-4">
+                <p className="text-2xl font-bold text-white">500</p>
+                <p className="text-xs text-white/50 mt-1">Emails per day</p>
+              </div>
+              <div className="rounded-md bg-white/5 border border-white/10 p-4">
+                <p className="text-2xl font-bold text-white">5s</p>
+                <p className="text-xs text-white/50 mt-1">Default delay between sends</p>
+              </div>
+            </div>
+            <p className="text-xs text-white/40 mt-3">
+              Rate limits are enforced server-side to protect your Gmail account from being flagged.
+              Adjust delay per campaign in campaign settings.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Cpu className="w-5 h-5 text-green-400" />
+              <CardTitle>AI Model Configuration</CardTitle>
+            </div>
+            <CardDescription>NVIDIA NIM model used for email generation.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api_key">API Key</Label>
-              <Input id="api_key" type="password" value="********************************" readOnly className="bg-black/40 text-white/50" />
-              <p className="text-xs text-white/40">This key is loaded from the backend environment variables (NVIDIA_NIM_API_KEY).</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Model</Label>
+                <Input value="meta/llama-3.1-8b-instruct" readOnly className="bg-black/40 text-white/50" />
+                <p className="text-xs text-white/40">Configured via NVIDIA_NIM_MODEL env variable.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <Input type="password" value="********************************" readOnly className="bg-black/40 text-white/50" />
+                <p className="text-xs text-white/40">Loaded from NVIDIA_NIM_API_KEY env variable.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-purple-400" />
+              <CardTitle>Environment</CardTitle>
+            </div>
+            <CardDescription>System environment information for debugging.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-white/50">Backend URL</span>
+                <span className="text-white/70 font-mono text-xs">{process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/50">Task Queue</span>
+                <span className="text-white/70 font-mono text-xs">Celery + Redis</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/50">Database</span>
+                <span className="text-white/70 font-mono text-xs">SQLite (local)</span>
+              </div>
             </div>
           </CardContent>
         </Card>

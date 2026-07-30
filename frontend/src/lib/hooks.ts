@@ -3,16 +3,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "./api"
 import type {
+  AnalyticsData,
   Campaign,
   CampaignCreate,
   CampaignStats,
+  CampaignUpdate,
   ContactWithEmail,
   DashboardStats,
   EmailLog,
+  EmailTemplate,
   GeneratedEmail,
   GmailAccount,
   GmailTestResult,
+  PaginatedLogs,
+  SchedulePayload,
+  TemplateCreate,
+  TemplateUpdate,
   UploadResult,
+  ValidationResult,
 } from "./types"
 
 // ----- Dashboard -----
@@ -21,6 +29,20 @@ export function useDashboardStats() {
   return useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => (await api.get<DashboardStats>("/dashboard/stats")).data,
+    refetchInterval: 10_000,
+  })
+}
+
+// ----- Paginated Logs -----
+
+export function usePaginatedLogs(limit: number, offset: number, status?: string) {
+  return useQuery({
+    queryKey: ["paginated-logs", limit, offset, status],
+    queryFn: async () => {
+      const params: Record<string, string | number> = { limit, offset }
+      if (status) params.status = status
+      return (await api.get<PaginatedLogs>("/dashboard/logs", { params })).data
+    },
     refetchInterval: 10_000,
   })
 }
@@ -51,6 +73,18 @@ export function useCreateCampaign() {
   })
 }
 
+export function useUpdateCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: CampaignUpdate }) =>
+      (await api.put<Campaign>(`/campaigns/${id}`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      qc.invalidateQueries({ queryKey: ["campaign", String(vars.id)] })
+    },
+  })
+}
+
 export function useDeleteCampaign() {
   const qc = useQueryClient()
   return useMutation({
@@ -59,6 +93,15 @@ export function useDeleteCampaign() {
       qc.invalidateQueries({ queryKey: ["campaigns"] })
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] })
     },
+  })
+}
+
+export function useDuplicateCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) =>
+      (await api.post<Campaign>(`/campaigns/${id}/duplicate`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
   })
 }
 
@@ -131,6 +174,60 @@ export function useStopCampaign() {
       (await api.post(`/campaigns/${campaignId}/stop`)).data,
     onSuccess: (_d, campaignId) =>
       qc.invalidateQueries({ queryKey: ["campaign", String(campaignId)] }),
+  })
+}
+
+// ----- Campaign Analytics -----
+
+export function useCampaignAnalytics(id: number | string) {
+  return useQuery({
+    queryKey: ["campaign-analytics", String(id)],
+    queryFn: async () => (await api.get<AnalyticsData>(`/campaigns/${id}/analytics`)).data,
+    enabled: id !== undefined && id !== null && id !== "",
+  })
+}
+
+// ----- Campaign Export -----
+
+export function useExportCampaign() {
+  return useMutation({
+    mutationFn: async (campaignId: number) => {
+      const response = await api.get(`/campaigns/${campaignId}/export`, {
+        responseType: "blob",
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement("a")
+      link.href = url
+      link.setAttribute("download", `campaign-${campaignId}-export.csv`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    },
+  })
+}
+
+// ----- Campaign Schedule -----
+
+export function useScheduleCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ campaignId, payload }: { campaignId: number; payload: SchedulePayload }) =>
+      (await api.post(`/campaigns/${campaignId}/schedule`, payload)).data,
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: ["campaign", String(vars.campaignId)] }),
+  })
+}
+
+// ----- Contact Validation -----
+
+export function useValidateContacts() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (campaignId: number) =>
+      (await api.post<ValidationResult>(`/contacts/${campaignId}/validate`)).data,
+    onSuccess: (_d, campaignId) =>
+      qc.invalidateQueries({ queryKey: ["contacts", String(campaignId)] }),
   })
 }
 
@@ -232,5 +329,51 @@ export function useDeleteGmailAccount() {
     mutationFn: async (accountId: number) =>
       (await api.delete(`/settings/gmail/${accountId}`)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gmail-accounts"] }),
+  })
+}
+
+// ----- Templates -----
+
+export function useTemplates() {
+  return useQuery({
+    queryKey: ["templates"],
+    queryFn: async () => (await api.get<EmailTemplate[]>("/templates/")).data,
+  })
+}
+
+export function useTemplate(id: number | string) {
+  return useQuery({
+    queryKey: ["template", String(id)],
+    queryFn: async () => (await api.get<EmailTemplate>(`/templates/${id}`)).data,
+    enabled: id !== undefined && id !== null && id !== "",
+  })
+}
+
+export function useCreateTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: TemplateCreate) =>
+      (await api.post<EmailTemplate>("/templates/", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+  })
+}
+
+export function useUpdateTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: TemplateUpdate }) =>
+      (await api.put<EmailTemplate>(`/templates/${id}`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["templates"] })
+      qc.invalidateQueries({ queryKey: ["template", String(vars.id)] })
+    },
+  })
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) => (await api.delete(`/templates/${id}`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
   })
 }

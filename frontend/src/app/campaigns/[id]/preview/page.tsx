@@ -11,10 +11,16 @@ import { StatusBadge } from "@/components/status-badge"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
-import { Check, Edit2, RefreshCw, Send, Sparkles, Loader2 } from "lucide-react"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import {
+  Check, Edit2, RefreshCw, Send, Sparkles, Loader2, ShieldCheck, Calendar, ChevronDown, ChevronUp,
+} from "lucide-react"
 import {
   useCampaign, useContacts, useGenerateEmails, useApproveEmail, useApproveAll,
   useRegenerateEmail, useEditEmail, useGmailAccounts, useSendCampaign,
+  useValidateContacts, useScheduleCampaign,
 } from "@/lib/hooks"
 import type { ContactWithEmail } from "@/lib/types"
 
@@ -31,14 +37,22 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
   const editEmail = useEditEmail(id)
   const { data: gmailAccounts } = useGmailAccounts()
   const send = useSendCampaign()
+  const validate = useValidateContacts()
+  const schedule = useScheduleCampaign()
 
   const [editing, setEditing] = useState<ContactWithEmail | null>(null)
   const [editSubject, setEditSubject] = useState("")
   const [editBody, setEditBody] = useState("")
   const [gmailId, setGmailId] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
+  const [expandedBody, setExpandedBody] = useState<number | null>(null)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState("")
+  const [scheduleTime, setScheduleTime] = useState("")
+  const [validateMsg, setValidateMsg] = useState<string | null>(null)
 
   const valid = (contacts ?? []).filter((c) => c.status === "Valid")
+  const allContacts = contacts ?? []
   const generatedCount = valid.filter((c) => c.email_id).length
   const hasGenerated = generatedCount > 0
 
@@ -69,6 +83,31 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
     }
   }
 
+  const onValidate = async () => {
+    setValidateMsg(null)
+    try {
+      const result = await validate.mutateAsync(Number(id))
+      setValidateMsg(`Validated ${result.validated} contacts: ${result.valid} valid, ${result.invalid} invalid`)
+    } catch (e) {
+      setValidateMsg(e instanceof Error ? e.message : "Validation failed")
+    }
+  }
+
+  const onSchedule = async () => {
+    if (!scheduleDate || !scheduleTime) return
+    const scheduledAt = `${scheduleDate}T${scheduleTime}:00`
+    try {
+      await schedule.mutateAsync({ campaignId: Number(id), payload: { scheduled_at: scheduledAt } })
+      setShowSchedule(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to schedule")
+    }
+  }
+
+  const toggleBody = (contactId: number) => {
+    setExpandedBody(expandedBody === contactId ? null : contactId)
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-center">
@@ -79,6 +118,16 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
           </p>
         </div>
         <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={onValidate}
+            disabled={validate.isPending || allContacts.length === 0}
+            className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+          >
+            {validate.isPending
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Validating...</>
+              : <><ShieldCheck className="w-4 h-4 mr-2" /> Validate Emails</>}
+          </Button>
           {!hasGenerated && (
             <Button
               onClick={() => generate.mutate(Number(id))}
@@ -86,7 +135,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-0"
             >
               {generate.isPending
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
                 : <><Sparkles className="w-4 h-4 mr-2" /> Generate Emails</>}
             </Button>
           )}
@@ -102,6 +151,12 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
+      {validateMsg && (
+        <Card className="border-blue-500/20 bg-blue-500/5">
+          <CardContent className="p-4 text-blue-300 text-sm">{validateMsg}</CardContent>
+        </Card>
+      )}
+
       {generate.isPending && (
         <Card className="border-indigo-500/20 bg-indigo-500/5">
           <CardContent className="p-4 text-indigo-300 text-sm flex items-center gap-2">
@@ -115,7 +170,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
         <CardHeader>
           <CardTitle>Generated Emails</CardTitle>
           <CardDescription>
-            {isLoading ? "Loading contacts…" : `${valid.length} valid contacts • ${generatedCount} generated`}
+            {isLoading ? "Loading contacts..." : `${valid.length} valid contacts - ${generatedCount} generated`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -123,53 +178,78 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
             <TableHeader>
               <TableRow>
                 <TableHead>Recipient</TableHead>
-                <TableHead className="w-[40%]">Subject</TableHead>
+                <TableHead className="w-[35%]">Subject</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {valid.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <p className="font-medium">{c.name || "—"}</p>
-                    <p className="text-xs text-white/50">{c.email}</p>
-                  </TableCell>
-                  <TableCell className="font-medium text-white/80">
-                    {c.subject || <span className="text-white/30">Not generated</span>}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={c.email_status ?? "Pending"} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost" size="icon" title="Edit"
-                        className="h-8 w-8 text-white/50 hover:text-white"
-                        disabled={!c.email_id}
-                        onClick={() => openEdit(c)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" title="Regenerate"
-                        className="h-8 w-8 text-white/50 hover:text-indigo-400"
-                        disabled={regenerate.isPending}
-                        onClick={() => regenerate.mutate(c.id)}
-                      >
-                        <RefreshCw className={`w-4 h-4 ${regenerate.isPending ? "animate-spin" : ""}`} />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" title="Approve"
-                        className="h-8 w-8 text-white/50 hover:text-green-400"
-                        disabled={!c.email_id || c.email_status === "Approved"}
-                        onClick={() => c.email_id && approve.mutate(c.email_id)}
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <>
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <p className="font-medium">{c.name || "-"}</p>
+                      <p className="text-xs text-white/50">{c.email}</p>
+                    </TableCell>
+                    <TableCell className="font-medium text-white/80">
+                      {c.subject ? (
+                        <button
+                          onClick={() => toggleBody(c.id)}
+                          className="flex items-center gap-1 text-left hover:text-indigo-300 transition-colors"
+                        >
+                          <span className="truncate max-w-[250px]">{c.subject}</span>
+                          {c.body && (
+                            expandedBody === c.id
+                              ? <ChevronUp className="w-3 h-3 shrink-0" />
+                              : <ChevronDown className="w-3 h-3 shrink-0" />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-white/30">Not generated</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={c.email_status ?? "Pending"} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost" size="icon" title="Edit"
+                          className="h-8 w-8 text-white/50 hover:text-white"
+                          disabled={!c.email_id}
+                          onClick={() => openEdit(c)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon" title="Regenerate"
+                          className="h-8 w-8 text-white/50 hover:text-indigo-400"
+                          disabled={regenerate.isPending}
+                          onClick={() => regenerate.mutate(c.id)}
+                        >
+                          <RefreshCw className={`w-4 h-4 ${regenerate.isPending ? "animate-spin" : ""}`} />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon" title="Approve"
+                          className="h-8 w-8 text-white/50 hover:text-green-400"
+                          disabled={!c.email_id || c.email_status === "Approved"}
+                          onClick={() => c.email_id && approve.mutate(c.email_id)}
+                        >
+                          <Check className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {expandedBody === c.id && c.body && (
+                    <TableRow key={`${c.id}-body`}>
+                      <TableCell colSpan={4} className="bg-white/5 border-l-2 border-indigo-500/40">
+                        <div className="p-3 text-sm text-white/70 whitespace-pre-wrap max-h-60 overflow-y-auto">
+                          {c.body}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
               ))}
               {!isLoading && valid.length === 0 && (
                 <TableRow>
@@ -187,16 +267,25 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
 
       <div className="flex justify-end items-center gap-3 pt-4">
         {gmailAccounts && gmailAccounts.length > 0 && (
-          <select
-            value={gmailId}
-            onChange={(e) => setGmailId(e.target.value)}
-            className="flex h-10 rounded-md border border-white/10 bg-black/20 px-3 text-sm text-white"
-          >
-            {gmailAccounts.map((a) => (
-              <option key={a.id} value={a.id} className="bg-slate-900">{a.email}</option>
-            ))}
-          </select>
+          <Select value={gmailId || String(gmailAccounts[0]?.id ?? "")} onValueChange={setGmailId}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Select Gmail account" />
+            </SelectTrigger>
+            <SelectContent>
+              {gmailAccounts.map((a) => (
+                <SelectItem key={a.id} value={String(a.id)}>{a.email}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
+        <Button
+          variant="outline"
+          onClick={() => setShowSchedule(true)}
+          disabled={!hasGenerated}
+          className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+        >
+          <Calendar className="w-4 h-4 mr-2" /> Schedule
+        </Button>
         <Button
           size="lg"
           onClick={startSending}
@@ -204,11 +293,12 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
           className="bg-indigo-600 hover:bg-indigo-700 border-0 text-white shadow-lg shadow-indigo-500/20"
         >
           {send.isPending
-            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting…</>
+            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting...</>
             : <><Send className="w-4 h-4 mr-2" /> Start Campaign Queue</>}
         </Button>
       </div>
 
+      {/* Edit Email Dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
@@ -232,7 +322,47 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
               disabled={editEmail.isPending}
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-0"
             >
-              {editEmail.isPending ? "Saving…" : "Save"}
+              {editEmail.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Dialog */}
+      <Dialog open={showSchedule} onOpenChange={setShowSchedule}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schedule Campaign</DialogTitle>
+            <DialogDescription>Set a date and time to automatically start sending.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="schedule-date">Date</Label>
+              <Input
+                id="schedule-date"
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="schedule-time">Time</Label>
+              <Input
+                id="schedule-time"
+                type="time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSchedule(false)}>Cancel</Button>
+            <Button
+              onClick={onSchedule}
+              disabled={schedule.isPending || !scheduleDate || !scheduleTime}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white border-0"
+            >
+              {schedule.isPending ? "Scheduling..." : "Schedule Send"}
             </Button>
           </DialogFooter>
         </DialogContent>
