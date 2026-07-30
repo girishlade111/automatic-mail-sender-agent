@@ -50,13 +50,15 @@ def generate_campaign_emails_task(self, campaign_id: int):
             }
             
             try:
+                # Use default arguments to capture loop variables by value,
+                # avoiding the closure-over-mutable-variable bug.
                 result = with_retries(
-                    lambda: generate_personalized_email(
-                        contact_data=contact_data,
-                        prompt_template=campaign.prompt_template or "",
-                        tone=campaign.tone,
-                        length=campaign.length,
-                        temperature=campaign.temperature
+                    lambda cd=contact_data, pt=campaign.prompt_template or "", t=campaign.tone, l=campaign.length, temp=campaign.temperature: generate_personalized_email(
+                        contact_data=cd,
+                        prompt_template=pt,
+                        tone=t,
+                        length=l,
+                        temperature=temp,
                     ),
                     attempts=settings.AI_RETRY_ATTEMPTS,
                 )
@@ -137,12 +139,12 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
 
             try:
                 with_retries(
-                    lambda: send_email(
-                        to_email=contact.email,
-                        subject=email_to_send.subject,
-                        body=email_to_send.body,
-                        sender_email=gmail_acc.email,
-                        app_password=app_password
+                    lambda to=contact.email, subj=email_to_send.subject, bd=email_to_send.body, se=gmail_acc.email, ap=app_password: send_email(
+                        to_email=to,
+                        subject=subj,
+                        body=bd,
+                        sender_email=se,
+                        app_password=ap,
                     ),
                     attempts=settings.SMTP_RETRY_ATTEMPTS,
                 )

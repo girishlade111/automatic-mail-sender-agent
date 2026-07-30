@@ -8,10 +8,38 @@ from app.schemas import (
     ContactWithEmailResponse,
     GeneratedEmailResponse,
     GeneratedEmailUpdate,
+    ManualContactCreate,
 )
 from app.services.ai_generator import generate_personalized_email
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
+
+
+@router.post("/manual", response_model=ContactResponse)
+def add_manual_contact(payload: ManualContactCreate, db: Session = Depends(get_db)):
+    """Add an individual contact to a campaign without file upload."""
+    campaign = db.query(Campaign).filter(Campaign.id == payload.campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    contact = Contact(
+        campaign_id=payload.campaign_id,
+        email=payload.email,
+        name=payload.name,
+        company=payload.company,
+        role=payload.role,
+        website=payload.website,
+        industry=payload.industry,
+        city=payload.city,
+        country=payload.country,
+        linkedin=payload.linkedin,
+        notes=payload.notes,
+        status="Valid",
+    )
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact
 
 @router.get("/{campaign_id}", response_model=List[ContactWithEmailResponse])
 def get_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):

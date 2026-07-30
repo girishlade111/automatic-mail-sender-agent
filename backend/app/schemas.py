@@ -125,3 +125,73 @@ class DashboardStatsResponse(BaseModel):
 class GmailTestResponse(BaseModel):
     ok: bool
     message: str
+
+
+# --- Campaign Update Schema ---
+
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: Optional[float] = None
+    delay_seconds: Optional[int] = None
+
+
+# --- Manual Contact Add Schema ---
+
+class ManualContactCreate(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    linkedin: Optional[str] = None
+    notes: Optional[str] = None
+    campaign_id: int
+
+
+# --- Template Schemas ---
+
+class TemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: float = 0.7
+
+
+class TemplateCreate(TemplateBase):
+    pass
+
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: Optional[float] = None
+
+
+class TemplateResponse(TemplateBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Logs Query Schema ---
+
+class LogsQueryParams(BaseModel):
+    skip: int = 0
+    limit: int = 50
+    campaign_id: Optional[int] = None
+    status: Optional[str] = None

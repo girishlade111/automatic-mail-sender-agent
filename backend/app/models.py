@@ -69,6 +69,18 @@ class GeneratedEmail(Base):
     
     contact = relationship("Contact", back_populates="generated_email")
 
+class Template(Base):
+    __tablename__ = "templates"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    description = Column(Text, nullable=True)
+    prompt_template = Column(Text, nullable=True)
+    tone = Column(String, nullable=True)
+    length = Column(String, nullable=True)
+    temperature = Column(Float, default=0.7)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class EmailLog(Base):
     __tablename__ = "email_logs"
     id = Column(Integer, primary_key=True, index=True)

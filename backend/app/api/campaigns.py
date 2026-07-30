@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
+import io
+import csv
 from app.database import get_db
 from app.models import Campaign, Contact, EmailLog, GeneratedEmail
-from app.schemas import CampaignCreate, CampaignResponse, CampaignStatsResponse
+from app.schemas import CampaignCreate, CampaignResponse, CampaignStatsResponse, CampaignUpdate
 from app.services.file_processor import process_file
 from app.tasks import generate_campaign_emails_task, send_campaign_emails_task
 
@@ -28,6 +31,19 @@ def get_campaign(campaign_id: int, db: Session = Depends(get_db)):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    return campaign
+
+
+@router.put("/{campaign_id}", response_model=CampaignResponse)
+def update_campaign(campaign_id: int, payload: CampaignUpdate, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(campaign, field, value)
+    db.commit()
+    db.refresh(campaign)
     return campaign
 
 @router.post("/{campaign_id}/upload")
@@ -79,7 +95,20 @@ def start_sending(campaign_id: int, gmail_account_id: int, db: Session = Depends
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-        
+
+    # Validate that at least one approved email exists
+    approved_count = (
+        db.query(GeneratedEmail)
+        .join(Contact)
+        .filter(Contact.campaign_id == campaign_id, GeneratedEmail.status == "Approved")
+        .count()
+    )
+    if approved_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot send: no approved emails in this campaign. Approve at least one email before sending.",
+        )
+
     campaign.status = "Sending"
     db.commit()
     send_campaign_emails_task.delay(campaign_id, gmail_account_id)
@@ -153,3 +182,62 @@ def get_campaign_stats(campaign_id: int, db: Session = Depends(get_db)):
 def get_campaign_logs(campaign_id: int, db: Session = Depends(get_db)):
     logs = db.query(EmailLog).join(Contact).filter(Contact.campaign_id == campaign_id).order_by(EmailLog.timestamp.desc()).limit(100).all()
     return logs
+
+
+@router.post("/{campaign_id}/duplicate", response_model=CampaignResponse)
+def duplicate_campaign(campaign_id: int, db: Session = Depends(get_db)):
+    """Clone a campaign configuration without contacts or emails."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    new_campaign = Campaign(
+        name=f"{campaign.name} (Copy)",
+        description=campaign.description,
+        type=campaign.type,
+        status="Draft",
+        prompt_template=campaign.prompt_template,
+        tone=campaign.tone,
+        length=campaign.length,
+        temperature=campaign.temperature,
+        delay_seconds=campaign.delay_seconds,
+    )
+    db.add(new_campaign)
+    db.commit()
+    db.refresh(new_campaign)
+    return new_campaign
+
+
+@router.get("/{campaign_id}/contacts/export")
+def export_contacts_csv(campaign_id: int, db: Session = Depends(get_db)):
+    """Export campaign contacts with their email generation/send status as CSV."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    contacts = db.query(Contact).filter(Contact.campaign_id == campaign_id).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "email", "name", "company", "role", "industry", "city", "country",
+        "status", "email_subject", "email_status",
+    ])
+    for c in contacts:
+        email_subject = ""
+        email_status = ""
+        if c.generated_email:
+            email_subject = c.generated_email.subject or ""
+            email_status = c.generated_email.status or ""
+        writer.writerow([
+            c.email, c.name or "", c.company or "", c.role or "",
+            c.industry or "", c.city or "", c.country or "",
+            c.status, email_subject, email_status,
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=campaign_{campaign_id}_contacts.csv"},
+    )
