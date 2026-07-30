@@ -1,5 +1,9 @@
 import logging
+import json
+import random
+import time
 from functools import partial
+from datetime import datetime, timedelta, timezone
 
 from app.celery_app import celery_app
 from app.database import SessionLocal
@@ -7,24 +11,12 @@ from app.models import Campaign, Contact, GeneratedEmail, EmailLog, GmailAccount
 from app.services.ai_generator import generate_personalized_email
 from app.services.email_sender import send_email
 from app.services.retry import with_retries
+from app.services.webhooks import fire_webhooks
+from app.services.rate_limit import sent_count_since
 from app.security import decrypt_password
 from app.config import settings
-from datetime import datetime, timedelta, timezone
-import time
 
 logger = logging.getLogger(__name__)
-
-
-def _sent_count_since(db, since) -> int:
-    """Count successful sends across ALL campaigns since ``since`` (Gmail limits are per account)."""
-    return (
-        db.query(EmailLog)
-        .filter(
-            EmailLog.status == "Sent",
-            EmailLog.timestamp >= since,
-        )
-        .count()
-    )
 
 
 def _generate_email_for_contact(contact_data: dict, campaign_prompt: str, tone: str, length: str, temperature: float) -> dict:
@@ -62,6 +54,14 @@ def generate_campaign_emails_task(self, campaign_id: int):
         db.commit()
         logger.info("Starting email generation for campaign %d", campaign_id)
 
+        # Parse A/B variants if configured
+        ab_variants = None
+        if campaign.ab_variants:
+            try:
+                ab_variants = json.loads(campaign.ab_variants)
+            except (json.JSONDecodeError, TypeError):
+                ab_variants = None
+
         contacts = db.query(Contact).filter(
             Contact.campaign_id == campaign_id,
             Contact.status == "Valid"
@@ -82,11 +82,19 @@ def generate_campaign_emails_task(self, campaign_id: int):
                 "notes": contact.notes,
             }
 
+            # Determine which prompt template to use (A/B variant or default)
+            variant_label = None
+            prompt_template = campaign.prompt_template or ""
+            if ab_variants and len(ab_variants) > 0:
+                chosen_variant = random.choice(ab_variants)
+                variant_label = chosen_variant.get("label", "")
+                prompt_template = chosen_variant.get("prompt_template", prompt_template)
+
             # Use partial to bind current values and avoid closure-over-loop-variable bug
             gen_fn = partial(
                 _generate_email_for_contact,
                 contact_data=contact_data,
-                campaign_prompt=campaign.prompt_template or "",
+                campaign_prompt=prompt_template,
                 tone=campaign.tone,
                 length=campaign.length,
                 temperature=campaign.temperature,
@@ -100,6 +108,7 @@ def generate_campaign_emails_task(self, campaign_id: int):
                     subject=result["subject"],
                     body=result["body"],
                     status="Pending",
+                    variant_label=variant_label,
                 )
                 db.add(gen_email)
 
@@ -143,12 +152,13 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
             db.refresh(campaign)
             if campaign.status in ["Paused", "Stopped"]:
                 logger.info("Campaign %d is %s, stopping send loop.", campaign_id, campaign.status)
+                fire_webhooks(campaign.status.lower(), campaign_id, campaign.name)
                 break
 
             # Rate limiting (PRD SS22): pause automatically if hourly/daily caps are hit.
             now = datetime.now(timezone.utc)
-            sent_last_hour = _sent_count_since(db, now - timedelta(hours=1))
-            sent_last_day = _sent_count_since(db, now - timedelta(days=1))
+            sent_last_hour = sent_count_since(db, now - timedelta(hours=1))
+            sent_last_day = sent_count_since(db, now - timedelta(days=1))
             if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR or sent_last_day >= settings.MAX_EMAILS_PER_DAY:
                 campaign.status = "Paused"
                 limit = "hourly" if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR else "daily"
@@ -162,6 +172,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
                     ))
                 db.commit()
                 logger.warning("Campaign %d paused due to %s rate limit.", campaign_id, limit)
+                fire_webhooks("paused", campaign_id, campaign.name)
                 break
 
             # Find next Approved email
@@ -174,6 +185,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
                 campaign.status = "Completed"
                 db.commit()
                 logger.info("Campaign %d completed - no more approved emails.", campaign_id)
+                fire_webhooks("completed", campaign_id, campaign.name)
                 break
 
             contact = email_to_send.contact
@@ -252,6 +264,17 @@ def check_scheduled_campaigns_task():
 
             if not gmail_account:
                 logger.warning("No Gmail account configured; cannot trigger scheduled campaign %d.", campaign.id)
+                continue
+
+            # Verify at least one approved email exists
+            approved_count = (
+                db.query(GeneratedEmail)
+                .join(Contact)
+                .filter(Contact.campaign_id == campaign.id, GeneratedEmail.status == "Approved")
+                .count()
+            )
+            if approved_count == 0:
+                # Nothing to send yet; leave scheduled
                 continue
 
             campaign.status = "Sending"

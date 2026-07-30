@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Plus, Edit2, Trash2, Loader2, FileText } from "lucide-react"
 import { useTemplates, useCreateTemplate, useUpdateTemplate, useDeleteTemplate } from "@/lib/hooks"
-import type { EmailTemplate, TemplateCreate } from "@/lib/types"
+import type { EmailTemplate, EmailTemplateCreate } from "@/lib/types"
 
 export default function TemplatesPage() {
   const { data: templates, isLoading, isError } = useTemplates()
@@ -60,7 +60,7 @@ export default function TemplatesPage() {
         },
       })
     } else {
-      const payload: TemplateCreate = {
+      const payload: EmailTemplateCreate = {
         name,
         subject_template: subjectTemplate,
         body_template: bodyTemplate,

@@ -24,6 +24,7 @@ class ContactResponse(ContactBase):
     id: int
     campaign_id: int
     status: str
+    score: int = 0
     validation_error: Optional[str] = None
 
     class Config:
@@ -48,6 +49,7 @@ class CampaignCreate(CampaignBase):
 class CampaignUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    type: Optional[str] = None
     prompt_template: Optional[str] = None
     tone: Optional[str] = None
     length: Optional[str] = None
@@ -59,6 +61,7 @@ class CampaignResponse(CampaignBase):
     id: int
     status: str
     scheduled_at: Optional[datetime] = None
+    ab_variants: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -103,6 +106,7 @@ class GeneratedEmailResponse(BaseModel):
     subject: str
     body: str
     status: str
+    variant_label: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -119,6 +123,7 @@ class ContactWithEmailResponse(ContactResponse):
     subject: Optional[str] = None
     body: Optional[str] = None
     email_status: Optional[str] = None
+    variant_label: Optional[str] = None
 
 
 class EmailLogResponse(BaseModel):
@@ -134,10 +139,8 @@ class EmailLogResponse(BaseModel):
 
 
 class PaginatedLogsResponse(BaseModel):
-    total: int
-    limit: int
-    offset: int
     logs: List[EmailLogResponse]
+    total: int
 
 
 class CampaignStatsResponse(BaseModel):
@@ -181,7 +184,8 @@ class GmailTestResponse(BaseModel):
     message: str
 
 
-# Email Template schemas
+# --- Email Template schemas (subject/body templates) ---
+
 class EmailTemplateBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -203,6 +207,130 @@ class EmailTemplateUpdate(BaseModel):
 
 
 class EmailTemplateResponse(EmailTemplateBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Campaign Preset Template Schemas ---
+
+class TemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: float = 0.7
+
+
+class TemplateCreate(TemplateBase):
+    pass
+
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    prompt_template: Optional[str] = None
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    temperature: Optional[float] = None
+
+
+class TemplateResponse(TemplateBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Manual Contact Add Schema ---
+
+class ManualContactCreate(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    linkedin: Optional[str] = None
+    notes: Optional[str] = None
+    campaign_id: int
+
+
+# --- Scheduling Schema ---
+
+class ScheduleCampaign(BaseModel):
+    scheduled_at: datetime
+
+
+# --- A/B Testing Schemas ---
+
+class ABVariant(BaseModel):
+    label: str
+    prompt_template: str
+
+
+class ABTestSetup(BaseModel):
+    variants: List[ABVariant]
+
+
+class ABVariantResult(BaseModel):
+    label: str
+    total: int
+    sent: int
+    failed: int
+    pending: int
+    approved: int
+
+
+class ABResultsResponse(BaseModel):
+    campaign_id: int
+    variants: List[ABVariantResult]
+
+
+# --- Contact Scoring Schema ---
+
+class ContactScoreUpdate(BaseModel):
+    score: int
+
+
+# --- Preflight Check Schemas ---
+
+class PreflightCheckItem(BaseModel):
+    name: str
+    status: str  # "pass", "fail", "warning"
+    message: str
+
+
+class PreflightResponse(BaseModel):
+    checks: List[PreflightCheckItem]
+    can_proceed: bool
+
+
+# --- Webhook Schemas ---
+
+class WebhookConfigBase(BaseModel):
+    url: str
+    events: List[str]  # e.g. ["completed", "failed", "paused"]
+    active: bool = True
+
+
+class WebhookConfigCreate(WebhookConfigBase):
+    pass
+
+
+class WebhookConfigUpdate(BaseModel):
+    url: Optional[str] = None
+    events: Optional[List[str]] = None
+    active: Optional[bool] = None
+
+
+class WebhookConfigResponse(WebhookConfigBase):
     id: int
     created_at: datetime
 

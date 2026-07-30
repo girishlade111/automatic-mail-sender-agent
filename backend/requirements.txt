@@ -15,5 +15,7 @@ python-multipart
 openai
 email-validator
 dnspython
+
+# Test dependencies
 pytest
 httpx

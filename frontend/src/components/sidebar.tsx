@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard, Megaphone, FilePlus, Megaphone as CampaignIcon,
-  ScrollText, Settings as SettingsIcon, User as UserIcon, FileText,
+  ScrollText, Settings as SettingsIcon, User as UserIcon,
+  FileText, BarChart3,
 } from "lucide-react"
 
 const NAV = [
@@ -13,6 +14,7 @@ const NAV = [
   { href: "/campaigns/create", label: "New Campaign", icon: FilePlus, exact: true },
   { href: "/templates", label: "Templates", icon: FileText, exact: false },
   { href: "/logs", label: "Logs", icon: ScrollText, exact: false },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, exact: false },
   { href: "/settings", label: "Settings", icon: SettingsIcon, exact: false },
 ]
 

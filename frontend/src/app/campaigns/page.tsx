@@ -1,34 +1,51 @@
 "use client"
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatusBadge } from "@/components/status-badge"
-import { FilePlus, Eye, Activity, Trash2, Copy, Edit2, BarChart3, Search } from "lucide-react"
+import { FilePlus, Eye, Activity, Trash2, Copy, Pencil } from "lucide-react"
 import { useCampaigns, useDeleteCampaign, useDuplicateCampaign } from "@/lib/hooks"
+import { useToast } from "@/components/toast-provider"
 
 export default function CampaignsList() {
+  const router = useRouter()
   const { data: campaigns, isLoading, isError } = useCampaigns()
   const deleteCampaign = useDeleteCampaign()
   const duplicateCampaign = useDuplicateCampaign()
+  const { toast } = useToast()
 
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState("")
 
-  const filteredCampaigns = useMemo(() => {
-    let result = campaigns ?? []
-    if (search) {
-      const s = search.toLowerCase()
-      result = result.filter((c) => c.name.toLowerCase().includes(s))
-    }
-    if (statusFilter && statusFilter !== "all") {
-      result = result.filter((c) => c.status === statusFilter)
-    }
-    return result
-  }, [campaigns, search, statusFilter])
+  const filtered = (campaigns ?? []).filter((c) => {
+    const matchesName = c.name.toLowerCase().includes(search.toLowerCase())
+    const matchesStatus = statusFilter ? c.status === statusFilter : true
+    return matchesName && matchesStatus
+  })
+
+  const handleDelete = (id: number) => {
+    deleteCampaign.mutate(id, {
+      onSuccess: () => toast({ title: "Campaign deleted", variant: "success" }),
+      onError: () => toast({ title: "Failed to delete campaign", variant: "error" }),
+    })
+  }
+
+  const handleDuplicate = (id: number) => {
+    duplicateCampaign.mutate(id, {
+      onSuccess: (data) => {
+        toast({ title: "Campaign duplicated", description: `Created: ${data.name}`, variant: "success" })
+        router.push(`/campaigns/${data.id}/preview`)
+      },
+      onError: () => toast({ title: "Failed to duplicate campaign", variant: "error" }),
+    })
+  }
+
+  const selectClass =
+    "flex h-9 rounded-md border border-white/10 bg-black/20 px-3 py-1 text-sm text-white shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -44,39 +61,35 @@ export default function CampaignsList() {
         </Link>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-          <Input
-            placeholder="Search campaigns..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <div className="w-44">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="Draft">Draft</SelectItem>
-              <SelectItem value="Generated">Generated</SelectItem>
-              <SelectItem value="Sending">Sending</SelectItem>
-              <SelectItem value="Paused">Paused</SelectItem>
-              <SelectItem value="Completed">Completed</SelectItem>
-              <SelectItem value="Stopped">Stopped</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
       <Card>
         <CardHeader>
-          <CardTitle>All Campaigns ({filteredCampaigns.length})</CardTitle>
+          <CardTitle>All Campaigns</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Search and Filter Controls */}
+          <div className="flex flex-wrap gap-3">
+            <Input
+              placeholder="Search by name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="max-w-xs"
+            />
+            <select
+              className={selectClass}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="" className="bg-slate-900">All Statuses</option>
+              <option value="Draft" className="bg-slate-900">Draft</option>
+              <option value="Generating" className="bg-slate-900">Generating</option>
+              <option value="Ready" className="bg-slate-900">Ready</option>
+              <option value="Sending" className="bg-slate-900">Sending</option>
+              <option value="Paused" className="bg-slate-900">Paused</option>
+              <option value="Completed" className="bg-slate-900">Completed</option>
+              <option value="Stopped" className="bg-slate-900">Stopped</option>
+            </select>
+          </div>
+
           {isError && <p className="text-red-400 text-sm">Could not load campaigns from the backend.</p>}
           <Table>
             <TableHeader>
@@ -89,7 +102,7 @@ export default function CampaignsList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCampaigns.map((c) => (
+              {filtered.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell className="text-white/70">{c.type}</TableCell>
@@ -109,21 +122,16 @@ export default function CampaignsList() {
                           <Activity className="w-4 h-4" />
                         </Button>
                       </Link>
-                      <Link href={`/campaigns/${c.id}/analytics`}>
-                        <Button variant="ghost" size="icon" title="Analytics" className="h-8 w-8 text-white/50 hover:text-purple-400">
-                          <BarChart3 className="w-4 h-4" />
-                        </Button>
-                      </Link>
                       <Link href={`/campaigns/${c.id}/edit`}>
                         <Button variant="ghost" size="icon" title="Edit" className="h-8 w-8 text-white/50 hover:text-yellow-400">
-                          <Edit2 className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" />
                         </Button>
                       </Link>
                       <Button
                         variant="ghost" size="icon" title="Duplicate"
-                        className="h-8 w-8 text-white/50 hover:text-green-400"
+                        className="h-8 w-8 text-white/50 hover:text-blue-400"
                         disabled={duplicateCampaign.isPending}
-                        onClick={() => duplicateCampaign.mutate(c.id)}
+                        onClick={() => handleDuplicate(c.id)}
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
@@ -131,7 +139,7 @@ export default function CampaignsList() {
                         variant="ghost" size="icon" title="Delete"
                         className="h-8 w-8 text-white/50 hover:text-red-400"
                         disabled={deleteCampaign.isPending}
-                        onClick={() => deleteCampaign.mutate(c.id)}
+                        onClick={() => handleDelete(c.id)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -139,12 +147,12 @@ export default function CampaignsList() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && filteredCampaigns.length === 0 && (
+              {!isLoading && filtered.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-white/40 py-6">
-                    {campaigns && campaigns.length > 0
-                      ? "No campaigns match your filters."
-                      : <>No campaigns yet. <Link href="/campaigns/create" className="text-indigo-400">Create your first campaign</Link>.</>
+                    {(campaigns ?? []).length === 0
+                      ? <>No campaigns yet. <Link href="/campaigns/create" className="text-indigo-400">Create your first campaign</Link>.</>
+                      : "No campaigns match your filters."
                     }
                   </TableCell>
                 </TableRow>
