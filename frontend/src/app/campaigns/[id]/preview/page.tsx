@@ -49,6 +49,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
   const [showSchedule, setShowSchedule] = useState(false)
   const [scheduleDate, setScheduleDate] = useState("")
   const [scheduleTime, setScheduleTime] = useState("")
+  const [scheduleGmailId, setScheduleGmailId] = useState<string>("")
   const [validateMsg, setValidateMsg] = useState<string | null>(null)
 
   const valid = (contacts ?? []).filter((c) => c.status === "Valid")
@@ -95,9 +96,14 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
 
   const onSchedule = async () => {
     if (!scheduleDate || !scheduleTime) return
-    const scheduledAt = `${scheduleDate}T${scheduleTime}:00`
+    const scheduledAt = `${scheduleDate}T${scheduleTime}:00Z`
+    const payload: { scheduled_at: string; gmail_account_id?: number } = { scheduled_at: scheduledAt }
+    const selectedAccount = scheduleGmailId || (gmailAccounts?.[0]?.id ? String(gmailAccounts[0].id) : "")
+    if (selectedAccount) {
+      payload.gmail_account_id = Number(selectedAccount)
+    }
     try {
-      await schedule.mutateAsync({ campaignId: Number(id), payload: { scheduled_at: scheduledAt } })
+      await schedule.mutateAsync({ campaignId: Number(id), payload })
       setShowSchedule(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to schedule")
@@ -333,7 +339,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Schedule Campaign</DialogTitle>
-            <DialogDescription>Set a date and time to automatically start sending.</DialogDescription>
+            <DialogDescription>Set a date and time (UTC) to automatically start sending.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -346,14 +352,30 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="schedule-time">Time</Label>
+              <Label htmlFor="schedule-time">Time (UTC)</Label>
               <Input
                 id="schedule-time"
                 type="time"
                 value={scheduleTime}
                 onChange={(e) => setScheduleTime(e.target.value)}
               />
+              <p className="text-xs text-white/40">All times are in UTC.</p>
             </div>
+            {gmailAccounts && gmailAccounts.length > 0 && (
+              <div className="space-y-2">
+                <Label>Gmail Account</Label>
+                <Select value={scheduleGmailId || String(gmailAccounts[0]?.id ?? "")} onValueChange={setScheduleGmailId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Gmail account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gmailAccounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSchedule(false)}>Cancel</Button>

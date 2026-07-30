@@ -34,6 +34,7 @@ class Campaign(Base):
     delay_seconds = Column(Integer, default=20)
 
     scheduled_at = Column(DateTime, nullable=True)
+    gmail_account_id = Column(Integer, ForeignKey("gmail_accounts.id"), nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

@@ -240,19 +240,27 @@ def check_scheduled_campaigns_task():
         if not due_campaigns:
             return
 
-        # Get the first available Gmail account for sending
-        gmail_account = db.query(GmailAccount).first()
-        if not gmail_account:
-            logger.warning("No Gmail account configured; cannot trigger scheduled campaigns.")
-            return
-
         for campaign in due_campaigns:
+            # Use the campaign's stored gmail_account_id if set, fall back to first available
+            if campaign.gmail_account_id:
+                gmail_account = db.query(GmailAccount).filter(GmailAccount.id == campaign.gmail_account_id).first()
+            else:
+                gmail_account = None
+
+            if not gmail_account:
+                gmail_account = db.query(GmailAccount).first()
+
+            if not gmail_account:
+                logger.warning("No Gmail account configured; cannot trigger scheduled campaign %d.", campaign.id)
+                continue
+
             campaign.status = "Sending"
             db.commit()
             logger.info(
-                "Triggering scheduled campaign %d (scheduled_at=%s)",
+                "Triggering scheduled campaign %d (scheduled_at=%s) with Gmail account %d",
                 campaign.id,
                 campaign.scheduled_at,
+                gmail_account.id,
             )
             send_campaign_emails_task.delay(campaign.id, gmail_account.id)
 

@@ -28,7 +28,7 @@ export default function CampaignAnalytics({ params }: { params: Promise<{ id: st
     )
   }
 
-  const deliveryPct = Math.round(analytics.delivery_rate * 100)
+  const deliveryPct = Math.round(analytics.delivery_rate)
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">

@@ -67,6 +67,7 @@ class CampaignResponse(CampaignBase):
 
 class CampaignScheduleRequest(BaseModel):
     scheduled_at: datetime
+    gmail_account_id: Optional[int] = None
 
 
 class CampaignAnalyticsResponse(BaseModel):

@@ -182,6 +182,10 @@ def schedule_campaign_endpoint(campaign_id: int, payload: CampaignScheduleReques
             detail=f"Cannot schedule campaign in '{campaign.status}' status."
         )
 
+    # Store the gmail_account_id if provided, so scheduled trigger uses the intended account
+    if payload.gmail_account_id is not None:
+        campaign.gmail_account_id = payload.gmail_account_id
+
     try:
         updated_campaign = schedule_campaign(db, campaign_id, payload.scheduled_at)
         return updated_campaign

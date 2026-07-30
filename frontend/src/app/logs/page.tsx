@@ -55,6 +55,7 @@ export default function LogsPage() {
               <SelectItem value="Sent">Sent</SelectItem>
               <SelectItem value="Failed">Failed</SelectItem>
               <SelectItem value="Generated">Generated</SelectItem>
+              <SelectItem value="Sending">Sending</SelectItem>
               <SelectItem value="Queued">Queued</SelectItem>
               <SelectItem value="RateLimited">Rate Limited</SelectItem>
             </SelectContent>

@@ -181,6 +181,7 @@ export interface TemplateUpdate {
 
 export interface SchedulePayload {
   scheduled_at: string
+  gmail_account_id?: number
 }
 
 export interface ValidationResult {
