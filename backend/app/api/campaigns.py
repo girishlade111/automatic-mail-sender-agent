@@ -15,6 +15,7 @@ from app.schemas import (
 )
 from app.services.file_processor import process_file
 from app.services.scoring import apply_auto_score
+from app.services.rate_limit import sent_count_since
 from app.tasks import generate_campaign_emails_task, send_campaign_emails_task
 from app.security import decrypt_password
 from app.config import settings
@@ -416,16 +417,8 @@ def preflight_check(campaign_id: int, db: Session = Depends(get_db)):
 
     # Check 4: Rate limits
     now = datetime.now(timezone.utc)
-    sent_last_hour = (
-        db.query(EmailLog)
-        .filter(EmailLog.status == "Sent", EmailLog.timestamp >= now - timedelta(hours=1))
-        .count()
-    )
-    sent_last_day = (
-        db.query(EmailLog)
-        .filter(EmailLog.status == "Sent", EmailLog.timestamp >= now - timedelta(days=1))
-        .count()
-    )
+    sent_last_hour = sent_count_since(db, now - timedelta(hours=1))
+    sent_last_day = sent_count_since(db, now - timedelta(days=1))
 
     hourly_remaining = settings.MAX_EMAILS_PER_HOUR - sent_last_hour
     daily_remaining = settings.MAX_EMAILS_PER_DAY - sent_last_day

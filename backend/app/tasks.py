@@ -5,6 +5,7 @@ from app.services.ai_generator import generate_personalized_email
 from app.services.email_sender import send_email
 from app.services.retry import with_retries
 from app.services.webhooks import fire_webhooks
+from app.services.rate_limit import sent_count_since
 from app.security import decrypt_password
 from app.config import settings
 from datetime import datetime, timedelta, timezone
@@ -12,14 +13,6 @@ import json
 import random
 import time
 
-
-def _sent_count_since(db, campaign_id: int, since) -> int:
-    """Count successful sends across ALL campaigns since ``since`` (Gmail limits are per account)."""
-    return (
-        db.query(EmailLog)
-        .filter(EmailLog.status == "Sent", EmailLog.timestamp >= since)
-        .count()
-    )
 
 @celery_app.task(bind=True, max_retries=3)
 def generate_campaign_emails_task(self, campaign_id: int):
@@ -126,8 +119,8 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
 
             # Rate limiting (PRD §22): pause automatically if hourly/daily caps are hit.
             now = datetime.now(timezone.utc)
-            sent_last_hour = _sent_count_since(db, campaign_id, now - timedelta(hours=1))
-            sent_last_day = _sent_count_since(db, campaign_id, now - timedelta(days=1))
+            sent_last_hour = sent_count_since(db, now - timedelta(hours=1))
+            sent_last_day = sent_count_since(db, now - timedelta(days=1))
             if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR or sent_last_day >= settings.MAX_EMAILS_PER_DAY:
                 campaign.status = "Paused"
                 limit = "hourly" if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR else "daily"
@@ -187,5 +180,46 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
             delay = campaign.delay_seconds or 20
             time.sleep(delay)
             
+    finally:
+        db.close()
+
+
+@celery_app.task
+def check_scheduled_campaigns():
+    """Periodic task that picks up scheduled campaigns whose scheduled_at has arrived.
+
+    This task should be triggered by Celery Beat (e.g., every 60 seconds). It finds
+    campaigns with status 'Scheduled' whose scheduled_at datetime is in the past,
+    and transitions them to 'Sending' if a Gmail account is available.
+    """
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        due_campaigns = (
+            db.query(Campaign)
+            .filter(Campaign.status == "Scheduled", Campaign.scheduled_at <= now)
+            .all()
+        )
+        for campaign in due_campaigns:
+            # Find the first available Gmail account to use for sending
+            gmail_acc = db.query(GmailAccount).first()
+            if not gmail_acc:
+                # Cannot send without a Gmail account; leave scheduled
+                continue
+
+            # Verify at least one approved email exists
+            approved_count = (
+                db.query(GeneratedEmail)
+                .join(Contact)
+                .filter(Contact.campaign_id == campaign.id, GeneratedEmail.status == "Approved")
+                .count()
+            )
+            if approved_count == 0:
+                # Nothing to send yet; leave scheduled
+                continue
+
+            campaign.status = "Sending"
+            db.commit()
+            send_campaign_emails_task.delay(campaign.id, gmail_acc.id)
     finally:
         db.close()

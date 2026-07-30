@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import Optional, List
 from app.database import get_db
 from app.models import Campaign, Contact, GeneratedEmail, EmailLog
-from app.schemas import DashboardStatsResponse, RecentCampaign, RecentLog, EmailLogResponse
+from app.schemas import DashboardStatsResponse, RecentCampaign, RecentLog
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -53,23 +52,3 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         recent_campaigns=recent_campaigns,
         recent_logs=recent_logs,
     )
-
-
-@router.get("/logs", response_model=List[EmailLogResponse])
-def get_logs(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=500),
-    campaign_id: Optional[int] = Query(None),
-    status: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-):
-    """Dedicated paginated logs endpoint with optional filtering."""
-    query = db.query(EmailLog).join(Contact)
-
-    if campaign_id is not None:
-        query = query.filter(Contact.campaign_id == campaign_id)
-    if status is not None:
-        query = query.filter(EmailLog.status == status)
-
-    logs = query.order_by(EmailLog.timestamp.desc()).offset(skip).limit(limit).all()
-    return logs

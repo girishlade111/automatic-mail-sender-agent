@@ -91,6 +91,7 @@ class EmailLogResponse(BaseModel):
     status: str
     message: Optional[str]
     timestamp: datetime
+    contact_email: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -191,6 +192,13 @@ class TemplateResponse(TemplateBase):
 
     class Config:
         from_attributes = True
+
+
+# --- Paginated Logs Response ---
+
+class PaginatedLogsResponse(BaseModel):
+    logs: List[EmailLogResponse]
+    total: int
 
 
 # --- Logs Query Schema ---

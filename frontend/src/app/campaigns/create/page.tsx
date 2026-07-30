@@ -177,6 +177,7 @@ export default function CreateCampaign() {
                 className="max-w-xs"
               />
               <p className="text-xs text-white/50">Leave empty to send manually. Set a future date to auto-schedule.</p>
+              <p className="text-xs text-amber-400/80 mt-1">Note: Automatic execution of scheduled campaigns requires Celery Beat to be running. Without it, scheduled campaigns must be sent manually when the time arrives.</p>
             </div>
           </CardContent>
         </Card>

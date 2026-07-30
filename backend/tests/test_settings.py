@@ -18,7 +18,9 @@ class TestTopLevelLogsEndpoint:
     def test_get_logs_empty(self, client):
         response = client.get("/api/logs")
         assert response.status_code == 200
-        assert response.json() == []
+        data = response.json()
+        assert data["logs"] == []
+        assert data["total"] == 0
 
     def test_get_logs_with_pagination(self, client, db_session):
         campaign = Campaign(name="Top Log Test", status="Draft")
@@ -37,7 +39,9 @@ class TestTopLevelLogsEndpoint:
 
         response = client.get("/api/logs", params={"skip": 0, "limit": 2})
         assert response.status_code == 200
-        assert len(response.json()) == 2
+        data = response.json()
+        assert len(data["logs"]) == 2
+        assert data["total"] == 5
 
     def test_get_logs_filter_by_status(self, client, db_session):
         campaign = Campaign(name="Filter", status="Draft")
@@ -56,6 +60,26 @@ class TestTopLevelLogsEndpoint:
 
         response = client.get("/api/logs", params={"status": "Failed"})
         assert response.status_code == 200
-        logs = response.json()
-        assert len(logs) == 1
-        assert logs[0]["status"] == "Failed"
+        data = response.json()
+        assert len(data["logs"]) == 1
+        assert data["logs"][0]["status"] == "Failed"
+        assert data["total"] == 1
+
+    def test_get_logs_includes_contact_email(self, client, db_session):
+        campaign = Campaign(name="Email Test", status="Draft")
+        db_session.add(campaign)
+        db_session.commit()
+        db_session.refresh(campaign)
+
+        contact = Contact(campaign_id=campaign.id, email="visible@test.com", status="Valid")
+        db_session.add(contact)
+        db_session.commit()
+        db_session.refresh(contact)
+
+        db_session.add(EmailLog(contact_id=contact.id, status="Sent", message="ok"))
+        db_session.commit()
+
+        response = client.get("/api/logs")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logs"][0]["contact_email"] == "visible@test.com"

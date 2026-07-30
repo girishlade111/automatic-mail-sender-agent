@@ -224,7 +224,7 @@ export function useAddManualContact() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ campaignId, contact }: { campaignId: number; contact: ManualContactCreate }) =>
-      (await api.post(`/contacts/manual`, contact, { params: { campaign_id: campaignId } })).data,
+      (await api.post(`/contacts/manual`, { ...contact, campaign_id: campaignId })).data,
     onSuccess: (_d, vars) =>
       qc.invalidateQueries({ queryKey: ["contacts", String(vars.campaignId)] }),
   })

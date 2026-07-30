@@ -1,12 +1,13 @@
 """Webhook notification service.
 
 Fires HTTP POST requests to configured webhook URLs when campaign events occur.
-In production this should be done asynchronously (e.g., via Celery task).
-Here we use a best-effort synchronous approach with a short timeout.
+Delivery runs in a background daemon thread so the Celery send loop is never
+blocked by webhook latency or timeouts.
 """
 
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,14 +21,8 @@ logger = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 5
 
 
-def fire_webhooks(event: str, campaign_id: int, campaign_name: Optional[str] = None) -> None:
-    """Send event payload to all active webhook configs subscribed to this event.
-
-    Args:
-        event: The event name, e.g. "completed", "failed", "paused".
-        campaign_id: The campaign that triggered the event.
-        campaign_name: Optional campaign name for context.
-    """
+def _deliver_webhooks(event: str, campaign_id: int, campaign_name: str) -> None:
+    """Internal: synchronous webhook delivery meant to run in a background thread."""
     db = SessionLocal()
     try:
         configs = db.query(WebhookConfig).filter(WebhookConfig.active == True).all()
@@ -43,7 +38,7 @@ def fire_webhooks(event: str, campaign_id: int, campaign_name: Optional[str] = N
             payload = {
                 "event": event,
                 "campaign_id": campaign_id,
-                "campaign_name": campaign_name or "",
+                "campaign_name": campaign_name,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -52,5 +47,26 @@ def fire_webhooks(event: str, campaign_id: int, campaign_name: Optional[str] = N
                     client.post(config.url, json=payload)
             except Exception as e:
                 logger.warning(f"Webhook delivery failed for {config.url}: {e}")
+    except Exception as e:
+        logger.error(f"Webhook delivery error: {e}")
     finally:
         db.close()
+
+
+def fire_webhooks(event: str, campaign_id: int, campaign_name: Optional[str] = None) -> None:
+    """Send event payload to all active webhook configs subscribed to this event.
+
+    Delivery happens in a fire-and-forget daemon thread so the caller (typically
+    the Celery send loop) is not blocked by network I/O.
+
+    Args:
+        event: The event name, e.g. "completed", "failed", "paused".
+        campaign_id: The campaign that triggered the event.
+        campaign_name: Optional campaign name for context.
+    """
+    thread = threading.Thread(
+        target=_deliver_webhooks,
+        args=(event, campaign_id, campaign_name or ""),
+        daemon=True,
+    )
+    thread.start()

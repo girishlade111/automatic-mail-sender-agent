@@ -6,7 +6,7 @@ from typing import Optional, List
 from app.config import settings
 from app.database import engine, Base, get_db
 from app.models import Contact, EmailLog
-from app.schemas import EmailLogResponse
+from app.schemas import EmailLogResponse, PaginatedLogsResponse
 
 from app.api import campaigns, contacts, settings as app_settings, dashboard, templates
 
@@ -46,7 +46,7 @@ def health_check(db: Session = Depends(get_db)):
     return {"status": "ok", "app": settings.PROJECT_NAME, "database": db_status}
 
 
-@app.get("/api/logs", response_model=List[EmailLogResponse])
+@app.get("/api/logs", response_model=PaginatedLogsResponse)
 def get_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
@@ -54,7 +54,11 @@ def get_logs(
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Dedicated paginated logs endpoint with optional filtering by campaign_id and status."""
+    """Dedicated paginated logs endpoint with optional filtering by campaign_id and status.
+
+    Returns a wrapper object with ``logs`` (the page of results) and ``total``
+    (the full count matching the filters) so the frontend can render pagination.
+    """
     query = db.query(EmailLog).join(Contact)
 
     if campaign_id is not None:
@@ -62,5 +66,19 @@ def get_logs(
     if status is not None:
         query = query.filter(EmailLog.status == status)
 
+    total = query.count()
     logs = query.order_by(EmailLog.timestamp.desc()).offset(skip).limit(limit).all()
-    return logs
+
+    # Enrich with contact_email for frontend display
+    enriched = []
+    for log in logs:
+        contact = db.query(Contact).filter(Contact.id == log.contact_id).first()
+        enriched.append(EmailLogResponse(
+            id=log.id,
+            contact_id=log.contact_id,
+            status=log.status,
+            message=log.message,
+            timestamp=log.timestamp,
+            contact_email=contact.email if contact else None,
+        ))
+    return PaginatedLogsResponse(logs=enriched, total=total)
