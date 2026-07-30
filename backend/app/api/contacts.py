@@ -6,11 +6,13 @@ from app.models import Campaign, Contact, GeneratedEmail, EmailLog
 from app.schemas import (
     ContactResponse,
     ContactWithEmailResponse,
+    ContactScoreUpdate,
     GeneratedEmailResponse,
     GeneratedEmailUpdate,
     ManualContactCreate,
 )
 from app.services.ai_generator import generate_personalized_email
+from app.services.scoring import apply_auto_score
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -36,7 +38,20 @@ def add_manual_contact(payload: ManualContactCreate, db: Session = Depends(get_d
         notes=payload.notes,
         status="Valid",
     )
+    apply_auto_score(contact)
     db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.put("/{contact_id}/score", response_model=ContactResponse)
+def update_contact_score(contact_id: int, payload: ContactScoreUpdate, db: Session = Depends(get_db)):
+    """Manually update a contact's score."""
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    contact.score = payload.score
     db.commit()
     db.refresh(contact)
     return contact
@@ -53,6 +68,7 @@ def get_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):
             data.subject = c.generated_email.subject
             data.body = c.generated_email.body
             data.email_status = c.generated_email.status
+            data.variant_label = c.generated_email.variant_label
         result.append(data)
     return result
 

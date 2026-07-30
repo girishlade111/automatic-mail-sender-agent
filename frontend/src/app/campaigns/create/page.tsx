@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { UploadCloud, ArrowRight, Loader2 } from "lucide-react"
-import { useCreateCampaign, useUploadContacts, useTemplates } from "@/lib/hooks"
+import { UploadCloud, ArrowRight, Loader2, Plus, Trash2, Calendar } from "lucide-react"
+import { useCreateCampaign, useUploadContacts, useTemplates, useScheduleCampaign, useSetupABTest } from "@/lib/hooks"
 import { useToast } from "@/components/toast-provider"
+import type { ABVariant } from "@/lib/types"
 
 interface FormValues {
   name: string
@@ -25,8 +26,12 @@ export default function CreateCampaign() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [scheduledAt, setScheduledAt] = useState<string>("")
+  const [abVariants, setAbVariants] = useState<ABVariant[]>([])
   const createCampaign = useCreateCampaign()
   const uploadContacts = useUploadContacts()
+  const scheduleCampaign = useScheduleCampaign()
+  const setupABTest = useSetupABTest()
   const { data: templates } = useTemplates()
   const { toast } = useToast()
 
@@ -54,6 +59,20 @@ export default function CreateCampaign() {
     }
   }
 
+  const addVariant = () => {
+    setAbVariants([...abVariants, { label: `Variant ${String.fromCharCode(65 + abVariants.length)}`, prompt_template: "" }])
+  }
+
+  const removeVariant = (index: number) => {
+    setAbVariants(abVariants.filter((_, i) => i !== index))
+  }
+
+  const updateVariant = (index: number, field: keyof ABVariant, value: string) => {
+    const updated = [...abVariants]
+    updated[index] = { ...updated[index], [field]: value }
+    setAbVariants(updated)
+  }
+
   const onSubmit = async (values: FormValues) => {
     setError(null)
     if (!file) {
@@ -71,6 +90,17 @@ export default function CreateCampaign() {
         delay_seconds: Number(values.delay_seconds),
       })
       await uploadContacts.mutateAsync({ campaignId: campaign.id, file })
+
+      // Set up A/B test if variants are defined
+      if (abVariants.length >= 2) {
+        await setupABTest.mutateAsync({ campaignId: campaign.id, payload: { variants: abVariants } })
+      }
+
+      // Schedule if datetime is set
+      if (scheduledAt) {
+        await scheduleCampaign.mutateAsync({ campaignId: campaign.id, payload: { scheduled_at: scheduledAt } })
+      }
+
       toast({ title: "Campaign created", variant: "success" })
       router.push(`/campaigns/${campaign.id}/preview`)
     } catch (e) {
@@ -123,6 +153,30 @@ export default function CreateCampaign() {
                   <option value={60} className="bg-slate-900">60 seconds</option>
                 </select>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Scheduling */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-400" />
+              <CardTitle>Schedule Campaign</CardTitle>
+            </div>
+            <CardDescription>Optionally schedule this campaign for future sending.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="scheduled_at">Scheduled Send Date/Time</Label>
+              <Input
+                id="scheduled_at"
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-white/50">Leave empty to send manually. Set a future date to auto-schedule.</p>
             </div>
           </CardContent>
         </Card>
@@ -192,6 +246,60 @@ export default function CreateCampaign() {
           </CardContent>
         </Card>
 
+        {/* A/B Testing */}
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>A/B Testing (Optional)</CardTitle>
+                <CardDescription>Add multiple prompt variants to test which performs best.</CardDescription>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addVariant}>
+                <Plus className="w-4 h-4 mr-2" /> Add Variant
+              </Button>
+            </div>
+          </CardHeader>
+          {abVariants.length > 0 && (
+            <CardContent className="space-y-4">
+              {abVariants.map((variant, index) => (
+                <div key={index} className="rounded-md bg-white/5 border border-white/10 p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="space-y-1 flex-1 mr-4">
+                      <Label>Variant Label</Label>
+                      <Input
+                        value={variant.label}
+                        onChange={(e) => updateVariant(index, "label", e.target.value)}
+                        placeholder="e.g., Variant A"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-400 hover:text-red-300"
+                      onClick={() => removeVariant(index)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Prompt Template</Label>
+                    <Textarea
+                      value={variant.prompt_template}
+                      onChange={(e) => updateVariant(index, "prompt_template", e.target.value)}
+                      placeholder="Write a personalized email to {{name}}..."
+                      className="h-24"
+                    />
+                  </div>
+                </div>
+              ))}
+              {abVariants.length < 2 && (
+                <p className="text-xs text-yellow-400">Add at least 2 variants for A/B testing to be active.</p>
+              )}
+            </CardContent>
+          )}
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Data Source</CardTitle>
@@ -201,7 +309,7 @@ export default function CreateCampaign() {
             <div className="border-2 border-dashed border-white/20 rounded-lg p-12 text-center hover:bg-white/5 transition-colors">
               <UploadCloud className="mx-auto h-12 w-12 text-white/40 mb-4" />
               <p className="text-white font-medium mb-1">Click to upload or drag and drop</p>
-              <p className="text-sm text-white/50">Supports .csv, .xlsx, .pdf, .txt (Max 25MB)</p>
+              <p className="text-sm text-white/50">Supports .csv, .xlsx, .xls, .pdf, .txt (Max 25MB)</p>
               <input
                 type="file"
                 className="hidden"

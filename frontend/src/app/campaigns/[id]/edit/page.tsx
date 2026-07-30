@@ -6,20 +6,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Save } from "lucide-react"
-import { useCampaign, useUpdateCampaign } from "@/lib/hooks"
+import { Loader2, Save, Plus, Trash2, Calendar } from "lucide-react"
+import { useCampaign, useUpdateCampaign, useScheduleCampaign, useSetupABTest } from "@/lib/hooks"
 import { useToast } from "@/components/toast-provider"
-import type { CampaignUpdate } from "@/lib/types"
+import type { CampaignUpdate, ABVariant } from "@/lib/types"
 
 export default function EditCampaign({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const { data: campaign, isLoading } = useCampaign(id)
   const updateCampaign = useUpdateCampaign()
+  const scheduleCampaign = useScheduleCampaign()
+  const setupABTest = useSetupABTest()
   const { toast } = useToast()
 
   const [form, setForm] = useState<CampaignUpdate>({})
   const [initialized, setInitialized] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState<string>("")
+  const [abVariants, setAbVariants] = useState<ABVariant[]>([])
 
   useEffect(() => {
     if (campaign && !initialized) {
@@ -32,13 +36,51 @@ export default function EditCampaign({ params }: { params: Promise<{ id: string 
         temperature: campaign.temperature,
         delay_seconds: campaign.delay_seconds,
       })
+      // Load scheduled_at if present
+      if (campaign.scheduled_at) {
+        const dt = new Date(campaign.scheduled_at)
+        const local = dt.toISOString().slice(0, 16)
+        setScheduledAt(local)
+      }
+      // Load A/B variants if present
+      if (campaign.ab_variants) {
+        try {
+          const parsed = JSON.parse(campaign.ab_variants)
+          if (Array.isArray(parsed)) setAbVariants(parsed)
+        } catch { /* ignore parse errors */ }
+      }
       setInitialized(true)
     }
   }, [campaign, initialized])
 
+  const addVariant = () => {
+    setAbVariants([...abVariants, { label: `Variant ${String.fromCharCode(65 + abVariants.length)}`, prompt_template: "" }])
+  }
+
+  const removeVariant = (index: number) => {
+    setAbVariants(abVariants.filter((_, i) => i !== index))
+  }
+
+  const updateVariant = (index: number, field: keyof ABVariant, value: string) => {
+    const updated = [...abVariants]
+    updated[index] = { ...updated[index], [field]: value }
+    setAbVariants(updated)
+  }
+
   const handleSave = async () => {
     try {
       await updateCampaign.mutateAsync({ id: Number(id), payload: form })
+
+      // Update scheduling
+      if (scheduledAt) {
+        await scheduleCampaign.mutateAsync({ campaignId: Number(id), payload: { scheduled_at: scheduledAt } })
+      }
+
+      // Update A/B variants
+      if (abVariants.length >= 2) {
+        await setupABTest.mutateAsync({ campaignId: Number(id), payload: { variants: abVariants } })
+      }
+
       toast({ title: "Campaign updated", variant: "success" })
       router.push("/campaigns")
     } catch {
@@ -113,6 +155,30 @@ export default function EditCampaign({ params }: { params: Promise<{ id: string 
         </CardContent>
       </Card>
 
+      {/* Scheduling */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-purple-400" />
+            <CardTitle>Schedule Campaign</CardTitle>
+          </div>
+          <CardDescription>Optionally schedule this campaign for future sending.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="scheduled_at">Scheduled Send Date/Time</Label>
+            <Input
+              id="scheduled_at"
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              className="max-w-xs"
+            />
+            <p className="text-xs text-white/50">Leave empty to send manually. Set a future date to auto-schedule.</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>AI Personalization Engine</CardTitle>
@@ -177,6 +243,60 @@ export default function EditCampaign({ params }: { params: Promise<{ id: string 
             </div>
           </div>
         </CardContent>
+      </Card>
+
+      {/* A/B Testing */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>A/B Testing (Optional)</CardTitle>
+              <CardDescription>Add multiple prompt variants to test which performs best.</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addVariant}>
+              <Plus className="w-4 h-4 mr-2" /> Add Variant
+            </Button>
+          </div>
+        </CardHeader>
+        {abVariants.length > 0 && (
+          <CardContent className="space-y-4">
+            {abVariants.map((variant, index) => (
+              <div key={index} className="rounded-md bg-white/5 border border-white/10 p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <div className="space-y-1 flex-1 mr-4">
+                    <Label>Variant Label</Label>
+                    <Input
+                      value={variant.label}
+                      onChange={(e) => updateVariant(index, "label", e.target.value)}
+                      placeholder="e.g., Variant A"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-red-400 hover:text-red-300"
+                    onClick={() => removeVariant(index)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="space-y-1">
+                  <Label>Prompt Template</Label>
+                  <Textarea
+                    value={variant.prompt_template}
+                    onChange={(e) => updateVariant(index, "prompt_template", e.target.value)}
+                    placeholder="Write a personalized email to {{name}}..."
+                    className="h-24"
+                  />
+                </div>
+              </div>
+            ))}
+            {abVariants.length < 2 && (
+              <p className="text-xs text-yellow-400">Add at least 2 variants for A/B testing to be active.</p>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       <div className="flex justify-end pt-4">

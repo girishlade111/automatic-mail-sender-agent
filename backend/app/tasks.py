@@ -4,9 +4,12 @@ from app.models import Campaign, Contact, GeneratedEmail, EmailLog, GmailAccount
 from app.services.ai_generator import generate_personalized_email
 from app.services.email_sender import send_email
 from app.services.retry import with_retries
+from app.services.webhooks import fire_webhooks
 from app.security import decrypt_password
 from app.config import settings
 from datetime import datetime, timedelta, timezone
+import json
+import random
 import time
 
 
@@ -28,6 +31,14 @@ def generate_campaign_emails_task(self, campaign_id: int):
             
         campaign.status = "Generating"
         db.commit()
+
+        # Parse A/B variants if configured
+        ab_variants = None
+        if campaign.ab_variants:
+            try:
+                ab_variants = json.loads(campaign.ab_variants)
+            except (json.JSONDecodeError, TypeError):
+                ab_variants = None
         
         contacts = db.query(Contact).filter(
             Contact.campaign_id == campaign_id,
@@ -48,12 +59,20 @@ def generate_campaign_emails_task(self, campaign_id: int):
                 "website": contact.website,
                 "notes": contact.notes
             }
+
+            # Determine which prompt template to use (A/B variant or default)
+            variant_label = None
+            prompt_template = campaign.prompt_template or ""
+            if ab_variants and len(ab_variants) > 0:
+                chosen_variant = random.choice(ab_variants)
+                variant_label = chosen_variant.get("label", "")
+                prompt_template = chosen_variant.get("prompt_template", prompt_template)
             
             try:
                 # Use default arguments to capture loop variables by value,
                 # avoiding the closure-over-mutable-variable bug.
                 result = with_retries(
-                    lambda cd=contact_data, pt=campaign.prompt_template or "", t=campaign.tone, l=campaign.length, temp=campaign.temperature: generate_personalized_email(
+                    lambda cd=contact_data, pt=prompt_template, t=campaign.tone, l=campaign.length, temp=campaign.temperature: generate_personalized_email(
                         contact_data=cd,
                         prompt_template=pt,
                         tone=t,
@@ -67,7 +86,8 @@ def generate_campaign_emails_task(self, campaign_id: int):
                     contact_id=contact.id,
                     subject=result["subject"],
                     body=result["body"],
-                    status="Pending"
+                    status="Pending",
+                    variant_label=variant_label,
                 )
                 db.add(gen_email)
                 
@@ -101,6 +121,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
         while True:
             db.refresh(campaign)
             if campaign.status in ["Paused", "Stopped"]:
+                fire_webhooks(campaign.status.lower(), campaign_id, campaign.name)
                 break
 
             # Rate limiting (PRD §22): pause automatically if hourly/daily caps are hit.
@@ -119,6 +140,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
                         message=f"Paused: {limit} sending limit reached",
                     ))
                 db.commit()
+                fire_webhooks("paused", campaign_id, campaign.name)
                 break
 
             # Find next Approved email
@@ -130,6 +152,7 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
             if not email_to_send:
                 campaign.status = "Completed"
                 db.commit()
+                fire_webhooks("completed", campaign_id, campaign.name)
                 break
 
             contact = email_to_send.contact

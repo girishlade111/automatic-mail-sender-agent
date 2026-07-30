@@ -1,0 +1,7 @@
+{
+  "task_id": "task-full-audit-and-enhancement",
+  "task_description": "Comprehensive audit, bug fix, and feature enhancement of the AI email outreach agent. Fix critical backend bugs (lambda closure, missing endpoints), add new capabilities (templates, scheduling, A/B testing, contact scoring, webhooks, analytics), enhance frontend with search/filter, pagination, toast notifications, and new management pages.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}
