@@ -1,6 +1,4 @@
 """Tests for the campaigns API endpoints."""
-import pytest
-from tests.conftest import client, db_session
 
 
 class TestCampaignsCRUD:
@@ -75,7 +73,7 @@ class TestCampaignDuplicate:
         dup_resp = client.post(f"/api/campaigns/{campaign_id}/duplicate")
         assert dup_resp.status_code == 200
         data = dup_resp.json()
-        assert data["name"] == "Original Campaign (Copy)"
+        assert data["name"] == "Copy of Original Campaign"
         assert data["status"] == "Draft"
         assert data["tone"] == "friendly"
         assert data["temperature"] == 0.9
@@ -97,7 +95,7 @@ class TestCampaignExport:
             "name": "Export User",
             "company": "ExportCo",
         })
-        response = client.get(f"/api/campaigns/{campaign_id}/contacts/export")
+        response = client.get(f"/api/campaigns/{campaign_id}/export")
         assert response.status_code == 200
         assert "text/csv" in response.headers["content-type"]
         content = response.text
@@ -105,7 +103,7 @@ class TestCampaignExport:
         assert "Export User" in content
 
     def test_export_not_found(self, client):
-        response = client.get("/api/campaigns/9999/contacts/export")
+        response = client.get("/api/campaigns/9999/export")
         assert response.status_code == 404
 
 
@@ -130,6 +128,33 @@ class TestCampaignStats:
         data = response.json()
         assert data["total"] == 0
         assert data["valid"] == 0
+
+    def test_stats_with_contacts(self, client):
+        create_resp = client.post("/api/campaigns/", json={"name": "Stats Test"})
+        campaign_id = create_resp.json()["id"]
+        csv_content = "email,name,company\nalice@example.com,Alice,Acme\nbob@example.com,Bob,Widgets"
+        client.post(
+            f"/api/campaigns/{campaign_id}/upload",
+            files={"file": ("test.csv", csv_content, "text/csv")},
+        )
+        response = client.get(f"/api/campaigns/{campaign_id}/stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 2
+        assert data["valid"] == 2
+
+
+class TestCampaignAnalytics:
+    def test_analytics_shape(self, client):
+        create_resp = client.post("/api/campaigns/", json={"name": "Analytics Test"})
+        campaign_id = create_resp.json()["id"]
+        response = client.get(f"/api/campaigns/{campaign_id}/analytics")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_contacts" in data
+        assert "valid_contacts" in data
+        assert "emails_generated" in data
+        assert "delivery_rate" in data
 
 
 class TestCampaignPauseStopResume:

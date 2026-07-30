@@ -5,6 +5,7 @@ import { api } from "./api"
 import type {
   ABResultsResponse,
   ABTestSetup,
+  AnalyticsData,
   Campaign,
   CampaignCreate,
   CampaignUpdate,
@@ -12,17 +13,19 @@ import type {
   ContactWithEmail,
   DashboardStats,
   EmailLog,
+  EmailTemplate,
+  EmailTemplateCreate,
+  EmailTemplateUpdate,
   GeneratedEmail,
   GmailAccount,
   GmailTestResult,
   LogsResponse,
   ManualContactCreate,
+  PaginatedLogs,
   PreflightResponse,
-  ScheduleCampaignPayload,
-  Template,
-  TemplateCreate,
-  TemplateUpdate,
+  SchedulePayload,
   UploadResult,
+  ValidationResult,
   WebhookConfig,
   WebhookConfigCreate,
   WebhookConfigUpdate,
@@ -34,6 +37,20 @@ export function useDashboardStats() {
   return useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => (await api.get<DashboardStats>("/dashboard/stats")).data,
+    refetchInterval: 10_000,
+  })
+}
+
+// ----- Paginated Logs -----
+
+export function usePaginatedLogs(limit: number, offset: number, status?: string) {
+  return useQuery({
+    queryKey: ["paginated-logs", limit, offset, status],
+    queryFn: async () => {
+      const params: Record<string, string | number> = { limit, offset }
+      if (status) params.status = status
+      return (await api.get<PaginatedLogs>("/dashboard/logs", { params })).data
+    },
     refetchInterval: 10_000,
   })
 }
@@ -170,6 +187,62 @@ export function useStopCampaign() {
   })
 }
 
+// ----- Campaign Analytics -----
+
+export function useCampaignAnalytics(id: number | string) {
+  return useQuery({
+    queryKey: ["campaign-analytics", String(id)],
+    queryFn: async () => (await api.get<AnalyticsData>(`/campaigns/${id}/analytics`)).data,
+    enabled: id !== undefined && id !== null && id !== "",
+  })
+}
+
+// ----- Campaign Export -----
+
+export function useExportCampaign() {
+  return useMutation({
+    mutationFn: async (campaignId: number) => {
+      const response = await api.get(`/campaigns/${campaignId}/export`, {
+        responseType: "blob",
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement("a")
+      link.href = url
+      link.setAttribute("download", `campaign-${campaignId}-export.csv`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    },
+  })
+}
+
+// ----- Campaign Schedule -----
+
+export function useScheduleCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ campaignId, payload }: { campaignId: number; payload: SchedulePayload }) =>
+      (await api.post(`/campaigns/${campaignId}/schedule`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      qc.invalidateQueries({ queryKey: ["campaign", String(vars.campaignId)] })
+    },
+  })
+}
+
+// ----- Contact Validation -----
+
+export function useValidateContacts() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (campaignId: number) =>
+      (await api.post<ValidationResult>(`/contacts/${campaignId}/validate`)).data,
+    onSuccess: (_d, campaignId) =>
+      qc.invalidateQueries({ queryKey: ["contacts", String(campaignId)] }),
+  })
+}
+
 // ----- Stats & logs (polling) -----
 
 export function useCampaignStats(id: number | string, active = true) {
@@ -284,20 +357,28 @@ export function useRegenerateEmail(campaignId: number | string) {
   })
 }
 
-// ----- Templates -----
+// ----- Templates (EmailTemplate model with subject/body) -----
 
 export function useTemplates() {
   return useQuery({
     queryKey: ["templates"],
-    queryFn: async () => (await api.get<Template[]>("/templates")).data,
+    queryFn: async () => (await api.get<EmailTemplate[]>("/templates/")).data,
+  })
+}
+
+export function useTemplate(id: number | string) {
+  return useQuery({
+    queryKey: ["template", String(id)],
+    queryFn: async () => (await api.get<EmailTemplate>(`/templates/${id}`)).data,
+    enabled: id !== undefined && id !== null && id !== "",
   })
 }
 
 export function useCreateTemplate() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (payload: TemplateCreate) =>
-      (await api.post<Template>("/templates", payload)).data,
+    mutationFn: async (payload: EmailTemplateCreate) =>
+      (await api.post<EmailTemplate>("/templates/", payload)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
   })
 }
@@ -305,9 +386,12 @@ export function useCreateTemplate() {
 export function useUpdateTemplate() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, payload }: { id: number; payload: TemplateUpdate }) =>
-      (await api.put<Template>(`/templates/${id}`, payload)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
+    mutationFn: async ({ id, payload }: { id: number; payload: EmailTemplateUpdate }) =>
+      (await api.put<EmailTemplate>(`/templates/${id}`, payload)).data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["templates"] })
+      qc.invalidateQueries({ queryKey: ["template", String(vars.id)] })
+    },
   })
 }
 
@@ -350,20 +434,6 @@ export function useDeleteGmailAccount() {
     mutationFn: async (accountId: number) =>
       (await api.delete(`/settings/gmail/${accountId}`)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gmail-accounts"] }),
-  })
-}
-
-// ----- Scheduling -----
-
-export function useScheduleCampaign() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ campaignId, payload }: { campaignId: number; payload: ScheduleCampaignPayload }) =>
-      (await api.post<Campaign>(`/campaigns/${campaignId}/schedule`, payload)).data,
-    onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ["campaigns"] })
-      qc.invalidateQueries({ queryKey: ["campaign", String(vars.campaignId)] })
-    },
   })
 }
 

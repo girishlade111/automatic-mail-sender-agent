@@ -19,7 +19,7 @@ celery_app.conf.update(
     # Start Celery Beat with: celery -A app.celery_app beat --loglevel=info
     beat_schedule={
         "check-scheduled-campaigns-every-60s": {
-            "task": "app.tasks.check_scheduled_campaigns",
+            "task": "app.tasks.check_scheduled_campaigns_task",
             "schedule": 60.0,
         },
     },

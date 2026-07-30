@@ -15,7 +15,7 @@ class TestScheduling:
         db_session.commit()
 
         resp = client.post(f"/api/campaigns/{campaign.id}/schedule", json={
-            "scheduled_at": "2025-12-25T10:00:00"
+            "scheduled_at": "2099-12-25T10:00:00"
         })
         assert resp.status_code == 200
         data = resp.json()

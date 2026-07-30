@@ -1,0 +1,44 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix all backend bugs, add missing API endpoints, improve error handling, add proper logging, fix Celery task closure issues, add a dedicated logs endpoint, fix rate-limiting logic, add email validation service, and add campaign duplicate/analytics endpoints.",
+  "status": "completed",
+  "steps": [
+    "Create a new git branch called 'feat/full-agent-overhaul' from main",
+    "Fix backend/app/tasks.py: The lambda inside with_retries creates a closure bug in loops - the contact variable may be stale. Extract to a local function or use functools.partial. Also fix _sent_count_since which accepts campaign_id but never uses it in the query filter.",
+    "Add a dedicated GET /api/logs endpoint in backend/app/api/dashboard.py that returns paginated logs (limit/offset query params) across all campaigns with contact email joined. The current logs page only sees 8 entries from the dashboard stats endpoint.",
+    "Add POST /api/campaigns/{id}/duplicate endpoint in backend/app/api/campaigns.py that deep-copies a campaign (name, type, prompt_template, tone, length, temperature, delay_seconds) with 'Copy of' prefix and Draft status.",
+    "Add GET /api/campaigns/{id}/analytics endpoint in backend/app/api/campaigns.py returning detailed metrics: total_contacts, valid_contacts, emails_generated, emails_approved, emails_sent, emails_failed, delivery_rate, open_rate (placeholder 0), avg_generation_time (placeholder).",
+    "Add a new service backend/app/services/email_validator.py with a function validate_email_address(email) that checks format via regex and optionally does DNS MX record lookup (using dnspython). Add dnspython to requirements.txt.",
+    "Add POST /api/contacts/{campaign_id}/validate endpoint in backend/app/api/contacts.py that runs email validation on all contacts in the campaign, updating their status to Valid/Invalid.",
+    "Add PUT /api/campaigns/{id} endpoint in backend/app/api/campaigns.py for updating campaign settings (name, prompt_template, tone, length, temperature, delay_seconds). Only allowed in Draft/Generated status.",
+    "Add GET /api/campaigns/{id}/export endpoint that returns a CSV file of all contacts with their email status (sent/failed/pending) and generated subject lines.",
+    "Add a new backend/app/api/templates.py router with CRUD endpoints for reusable email templates: GET /api/templates/, POST /api/templates/, GET /api/templates/{id}, PUT /api/templates/{id}, DELETE /api/templates/{id}. Add an EmailTemplate model to models.py with fields: id, name, description, subject_template, body_template, category, created_at.",
+    "Add the EmailTemplate model to backend/app/models.py and corresponding Pydantic schemas to backend/app/schemas.py.",
+    "Register the templates router in backend/app/main.py.",
+    "Add a new backend/app/services/scheduler.py with a function that stores scheduled send times. Add a 'scheduled_at' optional DateTime column to the Campaign model. Add POST /api/campaigns/{id}/schedule endpoint.",
+    "Improve backend/app/services/email_sender.py: add HTML email support (set_content with subtype='html'), add a sender_name parameter for the From header display name.",
+    "Add proper Python logging throughout backend: configure logging in main.py, add logger usage in tasks.py, ai_generator.py, email_sender.py instead of silent failures.",
+    "Update backend/requirements.txt to include dnspython and any other new dependencies.",
+    "Ensure all new endpoints have proper error handling with HTTPException and meaningful error messages."
+  ],
+  "acceptance_criteria": [
+    "Backend starts without errors: uvicorn app.main:app --host 0.0.0.0 --port 8000 runs successfully",
+    "All new endpoints are accessible and return proper responses (checked via /docs)",
+    "The closure bug in tasks.py is fixed - each contact's email generation uses the correct contact_data",
+    "The logs endpoint supports pagination with limit and offset parameters",
+    "Campaign duplicate creates a new campaign with all settings copied",
+    "Email validation service properly validates email format",
+    "Templates CRUD endpoints work correctly",
+    "CSV export returns proper CSV content with content-disposition header",
+    "Campaign update endpoint validates status before allowing changes"
+  ],
+  "verification": [
+    "cd backend && pip install -r requirements.txt && python -c \"from app.main import app; print('Backend imports OK')\"",
+    "cd backend && python -c \"from app.models import EmailTemplate, Campaign; print('Models OK')\"",
+    "cd backend && python -c \"from app.services.email_validator import validate_email_address; print('Validator OK')\"",
+    "cd backend && python -c \"from app.api.templates import router; print('Templates router OK')\""
+  ],
+  "blocked_reason": null,
+  "findings": "All verification commands pass. Used python3 (not python) since the sandbox has Python 3.9 at /usr/bin/python3. No .gitignore exists so __pycache__ and local.db are present but not committed. dnspython installed successfully for MX record validation. All 14 new/modified files committed."
+}

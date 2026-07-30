@@ -91,6 +91,22 @@ export interface LogsResponse {
   total: number
 }
 
+export interface PaginatedLog {
+  id: number
+  contact_id: number
+  contact_email?: string | null
+  status: string
+  message?: string | null
+  timestamp: string
+}
+
+export interface PaginatedLogs {
+  total: number
+  limit: number
+  offset: number
+  logs: PaginatedLog[]
+}
+
 export interface CampaignStats {
   total: number
   valid: number
@@ -100,6 +116,18 @@ export interface CampaignStats {
   sent: number
   failed: number
   pending: number
+}
+
+export interface AnalyticsData {
+  total_contacts: number
+  valid_contacts: number
+  emails_generated: number
+  emails_approved: number
+  emails_sent: number
+  emails_failed: number
+  delivery_rate: number
+  open_rate: number
+  avg_generation_time: number
 }
 
 export interface RecentCampaign {
@@ -168,6 +196,44 @@ export interface GmailTestResult {
 
 export interface UploadResult {
   message: string
+  valid: number
+  invalid: number
+}
+
+export interface EmailTemplate {
+  id: number
+  name: string
+  description?: string | null
+  subject_template: string
+  body_template: string
+  category?: string | null
+  created_at: string
+}
+
+export interface EmailTemplateCreate {
+  name: string
+  description?: string
+  subject_template: string
+  body_template: string
+  category?: string
+}
+
+export interface EmailTemplateUpdate {
+  name?: string
+  description?: string
+  subject_template?: string
+  body_template?: string
+  category?: string
+}
+
+export interface SchedulePayload {
+  scheduled_at: string
+  gmail_account_id?: number
+}
+
+export interface ValidationResult {
+  message: string
+  validated: number
   valid: number
   invalid: number
 }

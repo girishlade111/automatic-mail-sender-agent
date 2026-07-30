@@ -1,6 +1,9 @@
+import logging
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+
 from app.database import get_db
 from app.models import Campaign, Contact, GeneratedEmail, EmailLog
 from app.schemas import (
@@ -12,8 +15,10 @@ from app.schemas import (
     ManualContactCreate,
 )
 from app.services.ai_generator import generate_personalized_email
+from app.services.email_validator import validate_email_address
 from app.services.scoring import apply_auto_score
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
 
@@ -56,6 +61,7 @@ def update_contact_score(contact_id: int, payload: ContactScoreUpdate, db: Sessi
     db.refresh(contact)
     return contact
 
+
 @router.get("/{campaign_id}", response_model=List[ContactWithEmailResponse])
 def get_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):
     """Contacts joined with their generated email so the preview table needs one call."""
@@ -72,12 +78,60 @@ def get_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):
         result.append(data)
     return result
 
+
+@router.post("/{campaign_id}/validate")
+def validate_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):
+    """Run email validation on all pending contacts in a campaign.
+
+    Updates each contact's status to Valid or Invalid based on format/DNS checks.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    contacts = db.query(Contact).filter(
+        Contact.campaign_id == campaign_id,
+        Contact.status == "Pending",
+    ).all()
+
+    if not contacts:
+        raise HTTPException(status_code=400, detail="No pending contacts to validate")
+
+    valid_count = 0
+    invalid_count = 0
+
+    for contact in contacts:
+        is_valid, error_message = validate_email_address(contact.email)
+        if is_valid:
+            contact.status = "Valid"
+            contact.validation_error = None
+            valid_count += 1
+        else:
+            contact.status = "Invalid"
+            contact.validation_error = error_message
+            invalid_count += 1
+
+    db.commit()
+    logger.info(
+        "Validated %d contacts for campaign %d: %d valid, %d invalid",
+        len(contacts), campaign_id, valid_count, invalid_count,
+    )
+
+    return {
+        "message": "Validation complete",
+        "validated": len(contacts),
+        "valid": valid_count,
+        "invalid": invalid_count,
+    }
+
+
 @router.get("/{contact_id}/email", response_model=GeneratedEmailResponse)
 def get_generated_email(contact_id: int, db: Session = Depends(get_db)):
     email = db.query(GeneratedEmail).filter(GeneratedEmail.contact_id == contact_id).first()
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
     return email
+
 
 @router.put("/emails/{email_id}/approve")
 def approve_email(email_id: int, db: Session = Depends(get_db)):
@@ -88,9 +142,10 @@ def approve_email(email_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Approved"}
 
+
 @router.put("/emails/{email_id}", response_model=GeneratedEmailResponse)
 def edit_email(email_id: int, payload: GeneratedEmailUpdate, db: Session = Depends(get_db)):
-    """Manual edit of a generated email (PRD §18). Resets status to Pending for re-approval."""
+    """Manual edit of a generated email (PRD SS18). Resets status to Pending for re-approval."""
     email = db.query(GeneratedEmail).filter(GeneratedEmail.id == email_id).first()
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -101,9 +156,10 @@ def edit_email(email_id: int, payload: GeneratedEmailUpdate, db: Session = Depen
     db.refresh(email)
     return email
 
+
 @router.post("/{contact_id}/regenerate", response_model=GeneratedEmailResponse)
 def regenerate_email(contact_id: int, db: Session = Depends(get_db)):
-    """Re-run AI generation for a single contact (PRD §18)."""
+    """Re-run AI generation for a single contact (PRD SS18)."""
     contact = db.query(Contact).filter(Contact.id == contact_id).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -152,14 +208,15 @@ def regenerate_email(contact_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(email)
     return email
-    
+
+
 @router.put("/campaigns/{campaign_id}/approve-all")
 def approve_all_emails(campaign_id: int, db: Session = Depends(get_db)):
     emails = db.query(GeneratedEmail).join(Contact).filter(
         Contact.campaign_id == campaign_id,
         GeneratedEmail.status == "Pending"
     ).all()
-    
+
     for email in emails:
         email.status = "Approved"
     db.commit()

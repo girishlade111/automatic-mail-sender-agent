@@ -1,0 +1,40 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Fix frontend bugs and add all missing frontend features: dedicated logs page with pagination, campaign analytics page, template management UI, campaign edit/duplicate functionality, contact validation UI, export button, schedule sending UI, email body preview expansion, and improve the progress page with more detailed stats.",
+  "status": "completed",
+  "steps": [
+    "Update frontend/src/lib/types.ts: Add interfaces for EmailTemplate, TemplateCreate, AnalyticsData, PaginatedLogs, SchedulePayload. Update existing types if needed.",
+    "Update frontend/src/lib/hooks.ts: Add hooks for all new backend endpoints - useTemplates, useCreateTemplate, useUpdateTemplate, useDeleteTemplate, useCampaignAnalytics, useDuplicateCampaign, useUpdateCampaign, useValidateContacts, useExportCampaign, useScheduleCampaign, usePaginatedLogs. Fix existing hooks if they have issues.",
+    "Rewrite frontend/src/app/logs/page.tsx: Replace the current implementation that reuses dashboard stats (only 8 logs) with a proper paginated logs page that uses the new GET /api/logs endpoint. Add pagination controls (prev/next buttons), search/filter by status, and proper timestamp formatting.",
+    "Create frontend/src/app/templates/page.tsx: A template management page with a list of saved templates, create/edit/delete functionality using dialog modals. Include fields: name, description, category, subject_template, body_template. Show template variables available.",
+    "Create frontend/src/app/campaigns/[id]/analytics/page.tsx: A campaign analytics dashboard showing delivery metrics, success rates, timeline of sends, and a breakdown of statuses in a visual format (using colored bars/stats cards).",
+    "Update frontend/src/app/campaigns/[id]/preview/page.tsx: Add a body preview expansion (click to expand full email body in the table), add a 'Validate Emails' button that calls the validation endpoint, add 'Schedule Send' button with a date/time picker dialog, improve the Gmail account selector UX.",
+    "Update frontend/src/app/campaigns/page.tsx: Add a duplicate button next to delete for each campaign, add an edit button that navigates to an edit page or opens a dialog. Add status filter dropdown. Add search by campaign name.",
+    "Create frontend/src/app/campaigns/[id]/edit/page.tsx: A page to edit campaign settings (name, prompt template, tone, length, temperature, delay) - only available for Draft/Generated campaigns.",
+    "Update frontend/src/app/campaigns/[id]/progress/page.tsx: Add export button to download results as CSV, show delivery rate percentage, add auto-scroll to latest log, improve the stats panel with more metrics.",
+    "Update frontend/src/components/sidebar.tsx: Add 'Templates' navigation item with appropriate icon.",
+    "Update frontend/src/app/settings/page.tsx: Add a section showing current rate limits (from environment), add ability to configure NVIDIA model selection (display only since it's env-based).",
+    "Update frontend/src/app/profile/page.tsx: Show more detailed stats including total contacts processed, average emails per campaign, most used template.",
+    "Add a frontend/src/components/ui/select.tsx shadcn select component using @radix-ui/react-select (already in package.json dependencies) for consistent dropdowns across the app.",
+    "Add a frontend/src/components/ui/progress.tsx shadcn progress component using @radix-ui/react-progress (already in package.json) for the progress bars.",
+    "Ensure all new pages and components follow the existing dark theme glassmorphism design pattern with proper animations (animate-in fade-in slide-in-from-bottom-4 duration-500)."
+  ],
+  "acceptance_criteria": [
+    "Frontend builds without TypeScript errors: npm run build succeeds",
+    "All new pages are accessible via their routes",
+    "The logs page shows paginated results with navigation controls",
+    "Templates page allows full CRUD operations on email templates",
+    "Campaign analytics page displays meaningful metrics",
+    "Campaign list has working search, filter, duplicate, and edit actions",
+    "Preview page has email body expansion, validation button, and schedule dialog",
+    "Progress page has export button and improved stats",
+    "All new UI components follow the dark theme design system",
+    "Select and Progress shadcn components are properly created"
+  ],
+  "verification": [
+    "cd frontend && npm install && npm run build"
+  ],
+  "blocked_reason": null,
+  "findings": "All frontend features implemented and build verified. Node.js available via nvm (v22) at /opt/toolchains/.nvm/versions/node/v22.23.1/. Build completes in ~6s with Turbopack. All 11 routes registered (4 static, 4 dynamic, 3 static new). Used React fragments in preview table for body expansion rows. No pre-existing test infrastructure to run beyond npm run build."
+}

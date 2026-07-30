@@ -1,14 +1,27 @@
+import logging
+import sys
+from typing import Optional
+
 from fastapi import FastAPI, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import Optional, List
+
 from app.config import settings
 from app.database import engine, Base, get_db
 from app.models import Contact, EmailLog
 from app.schemas import EmailLogResponse, PaginatedLogsResponse
-
 from app.api import campaigns, contacts, settings as app_settings, dashboard, templates
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 # Create tables automatically for local development
 Base.metadata.create_all(bind=engine)
@@ -16,13 +29,13 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Backend API for AI Personalized Email Outreach Agent",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Change to frontend URL in production
+    allow_origins=["*"],  # Change to frontend URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,3 +95,6 @@ def get_logs(
             contact_email=contact.email if contact else None,
         ))
     return PaginatedLogsResponse(logs=enriched, total=total)
+
+
+logger.info("Application startup complete. Registered routers: campaigns, contacts, settings, dashboard, templates")

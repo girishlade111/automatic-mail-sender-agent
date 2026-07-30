@@ -1,7 +1,5 @@
 """Tests for the settings/gmail accounts API endpoints and top-level routes."""
-import pytest
 from app.models import Campaign, Contact, EmailLog
-from tests.conftest import client, db_session
 
 
 class TestHealthEndpoint:
@@ -83,3 +81,46 @@ class TestTopLevelLogsEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["logs"][0]["contact_email"] == "visible@test.com"
+
+
+class TestGmailAccounts:
+    def test_add_gmail_account(self, client):
+        response = client.post("/api/settings/gmail", json={
+            "email": "test@gmail.com",
+            "app_password": "test-app-password",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "test@gmail.com"
+        assert data["id"] is not None
+
+    def test_list_gmail_accounts(self, client):
+        client.post("/api/settings/gmail", json={
+            "email": "first@gmail.com",
+            "app_password": "pass1",
+        })
+        client.post("/api/settings/gmail", json={
+            "email": "second@gmail.com",
+            "app_password": "pass2",
+        })
+
+        response = client.get("/api/settings/gmail")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 2
+
+    def test_delete_gmail_account(self, client):
+        create_resp = client.post("/api/settings/gmail", json={
+            "email": "delete@gmail.com",
+            "app_password": "pass",
+        })
+        account_id = create_resp.json()["id"]
+
+        response = client.delete(f"/api/settings/gmail/{account_id}")
+        assert response.status_code == 200
+        assert response.json()["message"] == "Disconnected"
+
+        # Confirm deletion
+        list_resp = client.get("/api/settings/gmail")
+        assert len(list_resp.json()) == 0

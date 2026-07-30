@@ -49,13 +49,13 @@ export default function CreateCampaign() {
 
   const loadTemplate = (templateId: string) => {
     if (!templateId) return
-    const tpl = (templates ?? []).find((t) => t.id === Number(templateId))
+    const tpl = (templates ?? []).find((t) => t.id === Number(templateId)) as Record<string, unknown> | undefined
     if (tpl) {
-      setValue("prompt_template", tpl.prompt_template)
-      setValue("tone", tpl.tone ?? "Professional")
-      setValue("length", tpl.length ?? "Medium")
-      setValue("temperature", tpl.temperature)
-      toast({ title: "Template loaded", description: tpl.name, variant: "info" })
+      if (tpl.prompt_template) setValue("prompt_template", tpl.prompt_template as string)
+      if (tpl.tone) setValue("tone", (tpl.tone as string) ?? "Professional")
+      if (tpl.length) setValue("length", (tpl.length as string) ?? "Medium")
+      if (typeof tpl.temperature === "number") setValue("temperature", tpl.temperature)
+      toast({ title: "Template loaded", description: tpl.name as string, variant: "info" })
     }
   }
 

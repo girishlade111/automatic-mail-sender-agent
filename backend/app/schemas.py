@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Any
+from typing import Optional, List
 from datetime import datetime
+
 
 class ContactBase(BaseModel):
     email: EmailStr
@@ -14,8 +15,10 @@ class ContactBase(BaseModel):
     linkedin: Optional[str] = None
     notes: Optional[str] = None
 
+
 class ContactCreate(ContactBase):
     pass
+
 
 class ContactResponse(ContactBase):
     id: int
@@ -27,6 +30,7 @@ class ContactResponse(ContactBase):
     class Config:
         from_attributes = True
 
+
 class CampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -37,103 +41,10 @@ class CampaignBase(BaseModel):
     temperature: float = 0.7
     delay_seconds: int = 20
 
+
 class CampaignCreate(CampaignBase):
     pass
 
-class CampaignResponse(CampaignBase):
-    id: int
-    status: str
-    created_at: datetime
-    scheduled_at: Optional[datetime] = None
-    ab_variants: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
-
-class GmailAccountBase(BaseModel):
-    email: EmailStr
-
-class GmailAccountCreate(GmailAccountBase):
-    app_password: str
-
-class GmailAccountResponse(GmailAccountBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-class GeneratedEmailResponse(BaseModel):
-    id: int
-    contact_id: int
-    subject: str
-    body: str
-    status: str
-    variant_label: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-class GeneratedEmailUpdate(BaseModel):
-    subject: str
-    body: str
-
-class ContactWithEmailResponse(ContactResponse):
-    """Contact joined with its generated email so the preview table needs a single call."""
-    email_id: Optional[int] = None
-    subject: Optional[str] = None
-    body: Optional[str] = None
-    email_status: Optional[str] = None
-    variant_label: Optional[str] = None
-
-class EmailLogResponse(BaseModel):
-    id: int
-    contact_id: int
-    status: str
-    message: Optional[str]
-    timestamp: datetime
-    contact_email: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-class CampaignStatsResponse(BaseModel):
-    total: int
-    valid: int
-    invalid: int
-    generated: int
-    approved: int
-    sent: int
-    failed: int
-    pending: int
-
-class RecentCampaign(BaseModel):
-    id: int
-    name: str
-    status: str
-    sent: int
-
-class RecentLog(BaseModel):
-    id: int
-    contact_email: Optional[str] = None
-    status: str
-    message: Optional[str] = None
-    timestamp: datetime
-
-class DashboardStatsResponse(BaseModel):
-    total_campaigns: int
-    emails_sent: int
-    failed: int
-    pending: int
-    success_rate: float
-    recent_campaigns: List[RecentCampaign]
-    recent_logs: List[RecentLog]
-
-class GmailTestResponse(BaseModel):
-    ok: bool
-    message: str
-
-
-# --- Campaign Update Schema ---
 
 class CampaignUpdate(BaseModel):
     name: Optional[str] = None
@@ -146,23 +57,164 @@ class CampaignUpdate(BaseModel):
     delay_seconds: Optional[int] = None
 
 
-# --- Manual Contact Add Schema ---
+class CampaignResponse(CampaignBase):
+    id: int
+    status: str
+    scheduled_at: Optional[datetime] = None
+    ab_variants: Optional[str] = None
+    created_at: datetime
 
-class ManualContactCreate(BaseModel):
+    class Config:
+        from_attributes = True
+
+
+class CampaignScheduleRequest(BaseModel):
+    scheduled_at: datetime
+    gmail_account_id: Optional[int] = None
+
+
+class CampaignAnalyticsResponse(BaseModel):
+    total_contacts: int
+    valid_contacts: int
+    emails_generated: int
+    emails_approved: int
+    emails_sent: int
+    emails_failed: int
+    delivery_rate: float
+    open_rate: float
+    avg_generation_time: float
+
+
+class GmailAccountBase(BaseModel):
     email: EmailStr
+
+
+class GmailAccountCreate(GmailAccountBase):
+    app_password: str
+
+
+class GmailAccountResponse(GmailAccountBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratedEmailResponse(BaseModel):
+    id: int
+    contact_id: int
+    subject: str
+    body: str
+    status: str
+    variant_label: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratedEmailUpdate(BaseModel):
+    subject: str
+    body: str
+
+
+class ContactWithEmailResponse(ContactResponse):
+    """Contact joined with its generated email so the preview table needs a single call."""
+    email_id: Optional[int] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    email_status: Optional[str] = None
+    variant_label: Optional[str] = None
+
+
+class EmailLogResponse(BaseModel):
+    id: int
+    contact_id: int
+    contact_email: Optional[str] = None
+    status: str
+    message: Optional[str] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedLogsResponse(BaseModel):
+    logs: List[EmailLogResponse]
+    total: int
+
+
+class CampaignStatsResponse(BaseModel):
+    total: int
+    valid: int
+    invalid: int
+    generated: int
+    approved: int
+    sent: int
+    failed: int
+    pending: int
+
+
+class RecentCampaign(BaseModel):
+    id: int
+    name: str
+    status: str
+    sent: int
+
+
+class RecentLog(BaseModel):
+    id: int
+    contact_email: Optional[str] = None
+    status: str
+    message: Optional[str] = None
+    timestamp: datetime
+
+
+class DashboardStatsResponse(BaseModel):
+    total_campaigns: int
+    emails_sent: int
+    failed: int
+    pending: int
+    success_rate: float
+    recent_campaigns: List[RecentCampaign]
+    recent_logs: List[RecentLog]
+
+
+class GmailTestResponse(BaseModel):
+    ok: bool
+    message: str
+
+
+# --- Email Template schemas (subject/body templates) ---
+
+class EmailTemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    subject_template: str
+    body_template: str
+    category: Optional[str] = None
+
+
+class EmailTemplateCreate(EmailTemplateBase):
+    pass
+
+
+class EmailTemplateUpdate(BaseModel):
     name: Optional[str] = None
-    company: Optional[str] = None
-    role: Optional[str] = None
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    city: Optional[str] = None
-    country: Optional[str] = None
-    linkedin: Optional[str] = None
-    notes: Optional[str] = None
-    campaign_id: int
+    description: Optional[str] = None
+    subject_template: Optional[str] = None
+    body_template: Optional[str] = None
+    category: Optional[str] = None
 
 
-# --- Template Schemas ---
+class EmailTemplateResponse(EmailTemplateBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Campaign Preset Template Schemas ---
 
 class TemplateBase(BaseModel):
     name: str
@@ -194,20 +246,20 @@ class TemplateResponse(TemplateBase):
         from_attributes = True
 
 
-# --- Paginated Logs Response ---
+# --- Manual Contact Add Schema ---
 
-class PaginatedLogsResponse(BaseModel):
-    logs: List[EmailLogResponse]
-    total: int
-
-
-# --- Logs Query Schema ---
-
-class LogsQueryParams(BaseModel):
-    skip: int = 0
-    limit: int = 50
-    campaign_id: Optional[int] = None
-    status: Optional[str] = None
+class ManualContactCreate(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    linkedin: Optional[str] = None
+    notes: Optional[str] = None
+    campaign_id: int
 
 
 # --- Scheduling Schema ---

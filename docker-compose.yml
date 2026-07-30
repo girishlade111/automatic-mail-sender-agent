@@ -12,10 +12,19 @@ services:
       - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY:-}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   celery_worker:
     build:
@@ -27,11 +36,15 @@ services:
       - NVIDIA_NIM_API_KEY=${NVIDIA_NIM_API_KEY:-}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     depends_on:
-      - db
-      - redis
-      - backend
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     volumes:
       - ./backend:/app
+    restart: unless-stopped
 
   db:
     image: postgres:15
@@ -43,11 +56,25 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   frontend:
     build:
@@ -57,11 +84,12 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000/api
     depends_on:
-      - backend
-    # Skip volume mounting node_modules to avoid cross-platform issues
+      backend:
+        condition: service_healthy
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    restart: unless-stopped
 
 volumes:
   postgres_data:

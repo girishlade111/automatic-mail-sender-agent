@@ -1,11 +1,13 @@
 "use client"
-import { use } from "react"
+import { use, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Pause, Play, Square } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { Pause, Play, Square, Download, Loader2 } from "lucide-react"
 import {
   useCampaign, useCampaignStats, useCampaignLogs,
   usePauseCampaign, useResumeCampaign, useStopCampaign, useGmailAccounts,
+  useExportCampaign,
 } from "@/lib/hooks"
 
 const ACTIVE_STATES = ["Sending", "Generating"]
@@ -25,12 +27,14 @@ function formatTime(iso: string) {
 
 export default function CampaignProgress({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const logsRef = useRef<HTMLDivElement>(null)
 
   const { data: campaign } = useCampaign(id)
   const isActive = campaign ? ACTIVE_STATES.includes(campaign.status) : true
   const { data: stats } = useCampaignStats(id, isActive)
   const { data: logs } = useCampaignLogs(id, isActive)
   const { data: gmailAccounts } = useGmailAccounts()
+  const exportCampaign = useExportCampaign()
 
   const pause = usePauseCampaign()
   const resume = useResumeCampaign()
@@ -43,9 +47,17 @@ export default function CampaignProgress({ params }: { params: Promise<{ id: str
   const approved = stats?.approved ?? 0
   const done = sent + failed
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  const deliveryRate = done > 0 ? Math.round((sent / done) * 100) : 0
 
   const isPaused = campaign?.status === "Paused"
   const gmailId = gmailAccounts?.[0]?.id
+
+  // Auto-scroll logs to bottom
+  useEffect(() => {
+    if (logsRef.current) {
+      logsRef.current.scrollTop = logsRef.current.scrollHeight
+    }
+  }, [logs])
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
@@ -53,10 +65,20 @@ export default function CampaignProgress({ params }: { params: Promise<{ id: str
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Campaign Progress</h1>
           <p className="text-white/60">
-            {campaign ? `${campaign.name} — ${campaign.status}` : "Monitoring sending queue and real-time logs."}
+            {campaign ? `${campaign.name} - ${campaign.status}` : "Monitoring sending queue and real-time logs."}
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+            disabled={exportCampaign.isPending}
+            onClick={() => exportCampaign.mutate(Number(id))}
+          >
+            {exportCampaign.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <><Download className="w-4 h-4 mr-2" /> Export CSV</>}
+          </Button>
           {isPaused ? (
             <Button
               variant="outline"
@@ -99,17 +121,12 @@ export default function CampaignProgress({ params }: { params: Promise<{ id: str
               ) : (
                 <span className="inline-flex rounded-full h-3 w-3 bg-white/40"></span>
               )}
-              <span className="text-indigo-400 font-medium">{campaign?.status ?? "Loading…"}</span>
+              <span className="text-indigo-400 font-medium">{campaign?.status ?? "Loading..."}</span>
             </div>
             <span className="text-white font-medium">{done} / {total} Processed</span>
           </div>
 
-          <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-in-out"
-              style={{ width: `${pct}%` }}
-            ></div>
-          </div>
+          <Progress value={pct} />
 
           <div className="flex justify-between mt-4 text-xs text-white/50">
             <span>{approved} approved & queued</span>
@@ -125,7 +142,10 @@ export default function CampaignProgress({ params }: { params: Promise<{ id: str
               <CardTitle>Live Logs</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-black/60 rounded-md p-4 font-mono text-xs text-white/80 h-[300px] overflow-y-auto space-y-2">
+              <div
+                ref={logsRef}
+                className="bg-black/60 rounded-md p-4 font-mono text-xs text-white/80 h-[300px] overflow-y-auto space-y-2"
+              >
                 {(logs ?? []).map((log) => (
                   <div key={log.id} className="flex gap-4">
                     <span className="text-white/40 shrink-0">{formatTime(log.timestamp)}</span>
@@ -158,6 +178,14 @@ export default function CampaignProgress({ params }: { params: Promise<{ id: str
               <div className="flex justify-between items-center border-b border-white/5 pb-2">
                 <span className="text-white/60">Pending</span>
                 <span className="text-yellow-400 font-medium">{pending}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <span className="text-white/60">Delivery Rate</span>
+                <span className="text-indigo-400 font-medium">{deliveryRate}%</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <span className="text-white/60">Approved</span>
+                <span className="text-purple-400 font-medium">{approved}</span>
               </div>
               <div className="flex justify-between items-center pt-2">
                 <span className="text-white font-medium">Total Generated</span>
