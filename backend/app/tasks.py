@@ -15,7 +15,7 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def _sent_count_since(db, campaign_id: int, since) -> int:
+def _sent_count_since(db, since) -> int:
     """Count successful sends across ALL campaigns since ``since`` (Gmail limits are per account)."""
     return (
         db.query(EmailLog)
@@ -147,8 +147,8 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
 
             # Rate limiting (PRD SS22): pause automatically if hourly/daily caps are hit.
             now = datetime.now(timezone.utc)
-            sent_last_hour = _sent_count_since(db, campaign_id, now - timedelta(hours=1))
-            sent_last_day = _sent_count_since(db, campaign_id, now - timedelta(days=1))
+            sent_last_hour = _sent_count_since(db, now - timedelta(hours=1))
+            sent_last_day = _sent_count_since(db, now - timedelta(days=1))
             if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR or sent_last_day >= settings.MAX_EMAILS_PER_DAY:
                 campaign.status = "Paused"
                 limit = "hourly" if sent_last_hour >= settings.MAX_EMAILS_PER_HOUR else "daily"
@@ -214,5 +214,49 @@ def send_campaign_emails_task(self, campaign_id: int, gmail_account_id: int):
     except Exception as e:
         logger.exception("Unexpected error in send_campaign_emails_task for campaign %d", campaign_id)
         raise
+    finally:
+        db.close()
+
+
+@celery_app.task
+def check_scheduled_campaigns_task():
+    """Periodic task that checks for campaigns with status 'Scheduled' and scheduled_at <= now.
+
+    When a due campaign is found, it picks the first available Gmail account and triggers
+    the send_campaign_emails_task.
+    """
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        due_campaigns = (
+            db.query(Campaign)
+            .filter(
+                Campaign.status == "Scheduled",
+                Campaign.scheduled_at <= now,
+            )
+            .all()
+        )
+
+        if not due_campaigns:
+            return
+
+        # Get the first available Gmail account for sending
+        gmail_account = db.query(GmailAccount).first()
+        if not gmail_account:
+            logger.warning("No Gmail account configured; cannot trigger scheduled campaigns.")
+            return
+
+        for campaign in due_campaigns:
+            campaign.status = "Sending"
+            db.commit()
+            logger.info(
+                "Triggering scheduled campaign %d (scheduled_at=%s)",
+                campaign.id,
+                campaign.scheduled_at,
+            )
+            send_campaign_emails_task.delay(campaign.id, gmail_account.id)
+
+    except Exception as e:
+        logger.exception("Error in check_scheduled_campaigns_task: %s", str(e))
     finally:
         db.close()

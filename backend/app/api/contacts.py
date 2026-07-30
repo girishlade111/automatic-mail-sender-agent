@@ -75,7 +75,7 @@ def validate_campaign_contacts(campaign_id: int, db: Session = Depends(get_db)):
 
     return {
         "message": "Validation complete",
-        "total": len(contacts),
+        "validated": len(contacts),
         "valid": valid_count,
         "invalid": invalid_count,
     }

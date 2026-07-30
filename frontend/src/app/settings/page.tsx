@@ -137,15 +137,15 @@ export default function Settings() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-md bg-white/5 border border-white/10 p-4">
-                <p className="text-2xl font-bold text-white">20</p>
-                <p className="text-xs text-white/50 mt-1">Emails per minute</p>
+                <p className="text-2xl font-bold text-white">50</p>
+                <p className="text-xs text-white/50 mt-1">Emails per hour</p>
               </div>
               <div className="rounded-md bg-white/5 border border-white/10 p-4">
-                <p className="text-2xl font-bold text-white">500</p>
+                <p className="text-2xl font-bold text-white">400</p>
                 <p className="text-xs text-white/50 mt-1">Emails per day</p>
               </div>
               <div className="rounded-md bg-white/5 border border-white/10 p-4">
-                <p className="text-2xl font-bold text-white">5s</p>
+                <p className="text-2xl font-bold text-white">20s</p>
                 <p className="text-xs text-white/50 mt-1">Default delay between sends</p>
               </div>
             </div>

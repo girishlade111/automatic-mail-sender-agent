@@ -14,7 +14,13 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     worker_prefetch_multiplier=1,
-    task_acks_late=True
+    task_acks_late=True,
+    beat_schedule={
+        "check-scheduled-campaigns": {
+            "task": "app.tasks.check_scheduled_campaigns_task",
+            "schedule": 60.0,  # Check every 60 seconds
+        },
+    },
 )
 
 import app.tasks

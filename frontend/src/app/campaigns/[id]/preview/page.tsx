@@ -1,5 +1,5 @@
 "use client"
-import { use, useState } from "react"
+import React, { use, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -185,8 +185,8 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
             </TableHeader>
             <TableBody>
               {valid.map((c) => (
-                <>
-                  <TableRow key={c.id}>
+                <React.Fragment key={c.id}>
+                  <TableRow>
                     <TableCell>
                       <p className="font-medium">{c.name || "-"}</p>
                       <p className="text-xs text-white/50">{c.email}</p>
@@ -249,7 +249,7 @@ export default function PreviewCampaign({ params }: { params: Promise<{ id: stri
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               ))}
               {!isLoading && valid.length === 0 && (
                 <TableRow>
